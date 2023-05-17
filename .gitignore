@@ -1,0 +1,13 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+documents/
+*.Rprofile*
+*Rproj*
+*lock*
+figures/
+literature/
+renv/
+*.ipynb_checkpoints*
+open-data/
