@@ -18,6 +18,7 @@ tbl_x_ii <- crossing(x1, x2)
 tbl_x_ii$category <- factor(as.numeric(tbl_x_ii$x1 < tbl_x_ii$x2))
 tbl_x_ii <- tbl_x_ii[!(tbl_x_ii$x1 == tbl_x_ii$x2), ]
 tbl_x_ii$cat_structure <- "information-integration"
+tbl_x_ii$trial_id <- seq(1, nrow(tbl_x_ii), by = 1)
 
 plot_grid <- function(tbl) {
   ggplot(tbl, aes(x1, x2, group = category)) + 
@@ -37,6 +38,8 @@ pl_ii <- plot_grid(tbl_x_ii) + geom_abline()
 tbl_x_sq <- crossing(x1, x2)
 tbl_x_sq$category <- factor((tbl_x_sq$x1 > mean(x1)) + (tbl_x_sq$x2 > mean(x2)) * 2 )
 tbl_x_sq$cat_structure <- "square"
+tbl_x_sq$trial_id <- seq(1, nrow(tbl_x_sq), by = 1)
+
 
 pl_sq <- plot_grid(tbl_x_sq) + geom_hline(yintercept = 5.5) + geom_vline(xintercept = 5.5)
 
@@ -56,6 +59,10 @@ tbl_x_ii_inb <- tbl_x_ii %>%
   ) %>% mutate(
     n = 10
   )
+tbl_x_ii_inb <- tbl_x_ii_inb[
+  sample(1:nrow(tbl_x_ii_inb), nrow(tbl_x_ii_inb), replace = FALSE), 
+  ]
+tbl_x_ii_inb$trial_id <- seq(1, nrow(tbl_x_ii_inb), by = 1)
 # tbl_x_sq_inb$n[tbl_x_sq_inb$category %in% c(1, 2)] <- 3
 
 plot_grid(tbl_x_ii_inb) + geom_abline()
@@ -110,6 +117,6 @@ smote_k <- function(k) {
 l_smote <- map(c(5, 10, 20), smote_k)
 
 grid.draw(arrangeGrob(pl_bl, l_smote[[1]], l_smote[[2]], l_smote[[3]], nrow = 2))
-
+  
 
 
