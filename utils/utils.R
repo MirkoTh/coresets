@@ -44,14 +44,14 @@ my_weighted_sample <- function(prop_1, tbl_df) {
   )
 }
 
-upsample <- function(tbl_x, category_used, n_upsample) {
+upsample <- function(category_used, n_upsample, tbl_x) {
   #' upsample by linearly interpolating between observed data points
   #' 
   #' @description divides up n_upsample equally by number of connections
   #' and linearly interpolates values with equal spacing
-  #' @param tbl_x tbl_df with physically presented stimuli
   #' @param category_used category to upsample data from
   #' @param n_upsample total number of data points to upsample
+  #' @param tbl_x tbl_df with physically presented stimuli
   #' @return a tbl with the original data points enriched
   #' with the upsampled data points
   
@@ -63,7 +63,7 @@ upsample <- function(tbl_x, category_used, n_upsample) {
   n_new_per_connection <- ifelse(is.na(n_new_per_connection), 0, n_new_per_connection)
   
   v_range <- seq(0, 1, length.out = (n_new_per_connection + 2))
-  v_range <- v_range[2 : (length(v_range) - 1)]
+  v_range <- v_range[!(v_range %in% c(0, 1))]
   fully_crossed <- crossing(
     data_category[, c("x1", "x2")] %>% rename(x1_1 = x1, x2_1 = x2), 
     data_category[, c("x1", "x2")] %>% rename(x1_2 = x1, x2_2 = x2)
@@ -74,7 +74,12 @@ upsample <- function(tbl_x, category_used, n_upsample) {
   unique_points <- data_category %>% dplyr::select(x1, x2)
   
   l_upsample <- map(v_range, my_weighted_sample, tbl_df = unique_pairs)
-  tbl_upsample <- rbind(unique_points, reduce(l_upsample, rbind))
+  if (length(l_upsample) > 0) {
+      new_points <- reduce(l_upsample, rbind)
+  } else if (length(l_upsample) == 0) {
+    new_points <- tibble(x1 = numeric(), x2 = numeric())
+  }
+  tbl_upsample <- rbind(unique_points, new_points)
   tbl_upsample$category <- category_used
   # tbl_upsample <- tbl_upsample %>%
   #   group_by(x1, x2, category) %>%
@@ -88,13 +93,14 @@ upsample <- function(tbl_x, category_used, n_upsample) {
 
 
 x_new <- tibble(x1 = 4.5, x2 = 4.7)
-tbl_x <- tbl_x_ii_inb
+tbl_x <- tbl_x_ii
 n_feat <- 2
 c <- .5
 w <- rep(1/n_feat, n_feat) # equal
 delta <- .99
 d_measure <- 1
 
+gcm_base(x_new, tbl_x, 2, c, w, delta, d_measure)
 gcm_base(x_new, tbl_x, 2, c, w, 0, d_measure)
 
 
@@ -102,13 +108,14 @@ plot_grid(tbl_x) +
   geom_abline() + coord_cartesian(xlim = c(1, 10), ylim = c(1, 10))
 
 # for one category
-category_used <- 0
-n_items_in_category <- nrow(tbl_x[tbl_x$category == category_used, ])
-n_upsample <- 1000
-tbl_upsample <- upsample(tbl_x, category_used, n_upsample)
-plot_grid(tbl_upsample %>% mutate(category = factor(category)))
+categories <- c(0, 1)
+ns_upsample <- c(0, 1000)
 
-gcm_base(x_new, tbl_x, 2, c, w, delta, d_measure)
+l_tbl_upsample <- map2(categories, ns_upsample, upsample, tbl_x = tbl_x)
+tbl_upsample <- l_tbl_upsample %>% reduce(rbind) %>% mutate(trial_id = seq(1, nrow(.)))
+plot_grid(tbl_upsample %>% mutate(category = factor(category)))
+gcm_base(x_new, tbl_upsample, 2, c, w, 0, d_measure)
+
 
 
 # todos
