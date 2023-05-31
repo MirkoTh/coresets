@@ -55,26 +55,30 @@ upsample <- function(tbl_x, category_used, n_upsample) {
   #' @return a tbl with the original data points enriched
   #' with the upsampled data points
   
-  tmp <- tbl_x %>% dplyr::filter(category == category_used)
-  n_unique_obs <- nrow(tmp)
+  data_category <- tbl_x %>% dplyr::filter(category == category_used)
+  n_unique_obs <- nrow(data_category)
   
   n_pairs <- ((n_unique_obs^2)/2) - (n_unique_obs/2)
   n_new_per_connection <- floor(n_upsample / n_pairs)
+  n_new_per_connection <- ifelse(is.na(n_new_per_connection), 0, n_new_per_connection)
   
   v_range <- seq(0, 1, length.out = (n_new_per_connection + 2))
   v_range <- v_range[2 : (length(v_range) - 1)]
-  tmp <- crossing(
-    tmp[, c("x1", "x2")] %>% rename(x1_1 = x1, x2_1 = x2), 
-    tmp[, c("x1", "x2")] %>% rename(x1_2 = x1, x2_2 = x2)
-  ) %>%
-    filter(!((x1_1 == x1_2) & (x2_1 == x2_2)))
-  unique_points <- tmp %>% group_by(x1_1, x2_1) %>% 
-    count() %>% dplyr::select(-n) %>%
-    rename(x1 = x1_1, x2 = x2_1)
+  fully_crossed <- crossing(
+    data_category[, c("x1", "x2")] %>% rename(x1_1 = x1, x2_1 = x2), 
+    data_category[, c("x1", "x2")] %>% rename(x1_2 = x1, x2_2 = x2)
+  )
+  mat_help <- matrix(seq(1, nrow(fully_crossed), by = 1), nrow = n_unique_obs)
+  unique_pairs <- fully_crossed[mat_help[lower.tri(mat_help)], ]
+
+  unique_points <- data_category %>% dplyr::select(x1, x2)
   
-  l_upsample <- map(v_range, my_weighted_sample, tbl_df = tmp)
+  l_upsample <- map(v_range, my_weighted_sample, tbl_df = unique_pairs)
   tbl_upsample <- rbind(unique_points, reduce(l_upsample, rbind))
   tbl_upsample$category <- category_used
+  # tbl_upsample <- tbl_upsample %>%
+  #   group_by(x1, x2, category) %>%
+  #   count() %>% dplyr::select(-n)
   
   return(tbl_upsample)
 }
@@ -91,7 +95,21 @@ w <- rep(1/n_feat, n_feat) # equal
 delta <- .99
 d_measure <- 1
 
+gcm_base(x_new, tbl_x, 2, c, w, 0, d_measure)
+
+
+plot_grid(tbl_x) +
+  geom_abline() + coord_cartesian(xlim = c(1, 10), ylim = c(1, 10))
+
+# for one category
+category_used <- 0
+n_items_in_category <- nrow(tbl_x[tbl_x$category == category_used, ])
+n_upsample <- 1000
+tbl_upsample <- upsample(tbl_x, category_used, n_upsample)
+plot_grid(tbl_upsample %>% mutate(category = factor(category)))
+
 gcm_base(x_new, tbl_x, 2, c, w, delta, d_measure)
+
 
 # todos
 # add/remove an item from the set of presented items
@@ -99,24 +117,9 @@ gcm_base(x_new, tbl_x, 2, c, w, delta, d_measure)
 # this makes sense only in the non-decay model
 # because recently added items have more weight in the decay model
 
-# borderline smote:
-# create a fine grid with values along that grid and then sample
-# sequentially according to importance of the individual points
-
-# default smote:
-# create a fine grid between all previously presented points
-# and then sample sequentially according to importance
 
 # number of finally used items is controlled by capacity parameter
 
-# default smote
-
-# for one category
-category_used <- 1
-n_upsample <- 10
-tbl_upsample <- upsample(tbl_x, category_used, n_upsample)
-plot_grid(tbl_upsample %>% mutate(category = factor(category))) +
-  geom_abline() + coord_cartesian(xlim = c(1, 10), ylim = c(1, 10))
 
 
 
