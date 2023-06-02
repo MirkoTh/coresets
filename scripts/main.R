@@ -2,7 +2,7 @@ library(tidyverse)
 library(grid)
 library(gridExtra)
 library(smotefamily)
-library(MASS)
+library(furrr)
 
 
 # create two category structures ------------------------------------------

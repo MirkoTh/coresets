@@ -72,12 +72,12 @@ upsample <- function(category_used, n_upsample, tbl_x) {
   )
   mat_help <- matrix(seq(1, nrow(fully_crossed), by = 1), nrow = n_unique_obs)
   unique_pairs <- fully_crossed[mat_help[lower.tri(mat_help)], ]
-
+  
   unique_points <- data_category %>% dplyr::select(x1, x2)
   
   l_upsample <- map(v_range, my_weighted_sample, tbl_df = unique_pairs)
   if (length(l_upsample) > 0) {
-      new_points <- reduce(l_upsample, rbind)
+    new_points <- reduce(l_upsample, rbind)
   } else if (length(l_upsample) == 0) {
     new_points <- tibble(x1 = numeric(), x2 = numeric())
   }
@@ -204,7 +204,7 @@ tbl_category_probs.5 <- cbind(
 tbl_category_probs.5$prob_error <- pmap_dbl(
   tbl_category_probs.5[, c("0", "1", "category")],
   ~ 1 - c(..1, ..2)[as.numeric(as.character(..3)) + 1]
-  )
+)
 pl_gcm_baseline.5 <- plot_grid(tbl_category_probs.5) +
   geom_tile(aes(fill = prob_error), alpha = .5) +
   scale_fill_gradient(name = "Prob. Error", low = "white", high = "tomato", limits = c(0, 1)) + 
@@ -230,15 +230,102 @@ grid.draw(arrangeGrob(pl_inb, pl_gcm_baseline.5, pl_gcm_baseline.1, nrow = 1))
 
 
 
+gcm_likelihood_no_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measure) {
+  l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
+  l_category_probs <- map(l_transfer_x, gcm_base, tbl_x = tbl_x, n_feat = n_feat, c = x[[1]], w = x[[2]], bias = x[[3]], delta = 0, d_measure = d_measure)
+  tbl_probs <- as.data.frame(reduce(l_category_probs, rbind)) %>% mutate(category = tbl_transfer$category)
+  tbl_probs$prob_correct <- pmap_dbl(
+    tbl_probs[, c("0", "1", "category")],
+    ~ c(..1, ..2)[as.numeric(as.character(..3)) + 1]
+  )
+  ll <- log(tbl_probs$prob_correct)
+  neg2llsum <- -2 * sum(ll)
+  return(neg2llsum)
+}
+
+gcm_likelihood_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measure) {
+  l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
+  l_category_probs <- map(l_transfer_x, gcm_base, tbl_x = tbl_x, n_feat = n_feat, c = x[[1]], w = x[[2]], bias = x[[3]], delta = x[[4]], d_measure = d_measure)
+  tbl_probs <- as.data.frame(reduce(l_category_probs, rbind)) %>% mutate(category = tbl_transfer$category)
+  tbl_probs$prob_correct <- pmap_dbl(
+    tbl_probs[, c("0", "1", "category")],
+    ~ c(..1, ..2)[as.numeric(as.character(..3)) + 1]
+  )
+  ll <- log(tbl_probs$prob_correct)
+  neg2llsum <- -2 * sum(ll)
+  return(neg2llsum)
+}
+
+
+# for one category
+categories <- c(0, 1)
+ns_upsample <- c(0, 100)
+
+l_tbl_upsample_inb <- map2(categories, ns_upsample, upsample, tbl_x = tbl_inb)
+tbl_inb_upsample <- l_tbl_upsample_inb %>% reduce(rbind) %>% 
+  group_by(x1, x2, category) %>%
+  count() %>% dplyr::select(-n) %>%
+  ungroup() %>%
+  mutate(trial_id = seq(1, nrow(.)))
+plot_grid(tbl_inb_upsample %>% mutate(category = factor(category))) + geom_abline()
+params <- c(c = 1, w = .5, bias = .5)
+
+
+gcm_likelihood_no_forgetting(params, tbl_transfer, tbl_inb, n_feat = 2, d_measure = 1)
+
+
+add_sample <- function(tbl_new_sample, tbl_base, params, tbl_transfer, n_feat, d_measure) {
+  gcm_likelihood_no_forgetting(params, tbl_transfer, tbl_x = rbind(tbl_base, tbl_new_sample) %>% mutate(trial_id = 1:(nrow(tbl_base) + 1)), n_feat = 2, d_measure = 1)
+}
 
 
 
 
+# varying number of upsampled points and evaluating likelihood of given responses
+# possible solution: first, upsample sufficient number of data points (e.g., 50)
+# then, do a constrained optimization with n ranging between 0 and that number (i.e., 50)
+
+importance_sampling <- function(l_new_samples, tbl_inb_plus, params, tbl_transfer, n_feat, d_measure, n_max = 10) {
+  future::plan(multisession, workers = future::availableCores() - 2)
+  
+  # sequential importance sampling
+  for (i in 1:n_max) {
+    v_importance <- future_map_dbl(l_new_samples, add_sample, tbl_base = tbl_inb_plus, params = params, tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1)
+    tbl_importance$importance <- v_importance
+    # pick best imagined data point
+    tbl_importance <- tbl_importance %>% mutate(rank_importance = rank(importance)) %>% arrange(rank_importance)
+    tbl_inb_plus <- rbind(tbl_inb_plus, tbl_importance %>% dplyr::filter(rank_importance == 1) %>% dplyr::select(x1, x2, category))
+  }
+  
+  future::plan("default")
+  return(tbl_inb_plus)
+}
+# calculate importance given set of data points
+tbl_inb_plus <- tbl_inb %>% dplyr::select(x1, x2, category)
+tbl_importance <- tbl_inb_upsample
+l_new_samples <- split(tbl_inb_upsample %>% dplyr::select(-trial_id), tbl_inb_upsample$trial_id)
+
+tbl_important_samples_2 <- importance_sampling(l_new_samples, tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 2)
+tbl_important_samples_2$is_new <- 1
+tbl_important_samples_2$is_new[(nrow(tbl_inb) + 1) : nrow(tbl_important_samples_2)] <- 5
+
+tbl_important_samples_10 <- importance_sampling(l_new_samples, tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 10)
+tbl_important_samples_10$is_new <- 1
+tbl_important_samples_10$is_new[(nrow(tbl_inb) + 1) : nrow(tbl_important_samples_10)] <- 5
 
 
+pl_points_obs <- plot_grid(tbl_inb %>% mutate(category = factor(category))) + 
+  geom_abline() + ggtitle("Observed")
+pl_points_importance_2 <- plot_grid(tbl_important_samples_2) + geom_abline() +
+  geom_point(aes(size = is_new), shape = 1) +
+  scale_size_continuous(guide = "none") +
+  ggtitle("Add Two Samples")
+pl_points_importance_10 <- plot_grid(tbl_important_samples_10) + geom_abline() +
+  geom_point(aes(size = is_new), shape = 1) +
+  scale_size_continuous(guide = "none") +
+  ggtitle("Add Ten Samples")
 
-
-
+grid.draw(arrangeGrob(pl_points_obs, pl_points_importance_2, pl_points_importance_10, nrow = 1))
 
 
 
