@@ -287,7 +287,7 @@ add_sample <- function(tbl_new_sample, tbl_base, params, tbl_transfer, n_feat, d
 # possible solution: first, upsample sufficient number of data points (e.g., 50)
 # then, do a constrained optimization with n ranging between 0 and that number (i.e., 50)
 
-importance_sampling <- function(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat, d_measure, n_max = 10) {
+importance_upsampling <- function(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat, d_measure, n_max = 10) {
   future::plan(multisession, workers = future::availableCores() - 2)
   l_samples <- l_new_samples
   # sequential importance sampling
@@ -311,11 +311,11 @@ tbl_inb_plus <- tbl_inb %>% dplyr::select(x1, x2, category)
 tbl_importance <- tbl_inb_upsample
 l_new_samples <- split(tbl_inb_upsample %>% dplyr::select(-trial_id), tbl_inb_upsample$trial_id)
 
-tbl_important_samples_2 <- importance_sampling(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 2)
+tbl_important_samples_2 <- importance_upsampling(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 2)
 tbl_important_samples_2$is_new <- 1
 tbl_important_samples_2$is_new[(nrow(tbl_inb) + 1) : nrow(tbl_important_samples_2)] <- 5
 
-tbl_important_samples_10 <- importance_sampling(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 10)
+tbl_important_samples_10 <- importance_upsampling(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 10)
 tbl_important_samples_10$is_new <- 1
 tbl_important_samples_10$is_new[(nrow(tbl_inb) + 1) : nrow(tbl_important_samples_10)] <- 5
 
