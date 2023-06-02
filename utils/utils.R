@@ -153,7 +153,9 @@ tbl_inb_upsample <- l_tbl_upsample_inb %>% reduce(rbind) %>%
   group_by(x1, x2, category) %>%
   count() %>% dplyr::select(-n) %>%
   ungroup() %>%
-  mutate(trial_id = seq(1, nrow(.)))
+  mutate(
+    trial_id = seq(1, nrow(.))
+    )
 
 pl_inb <- plot_grid(tbl_inb %>% mutate(category = factor(category))) + ggtitle("Stimuli") + geom_abline()
 pl_inb_up <- plot_grid(tbl_inb_upsample %>% mutate(category = factor(category))) + ggtitle("Upsampled")
@@ -186,9 +188,8 @@ gcm_base(tibble(x1 = 2.5, x2 = 4), tbl_inb_upsample, 2, c = 1, w = .5, bias = 1/
 
 
 # create 10 x 10 grid of data points
-x1 <- seq(1.5, 10.5, by = 1)
-x2 <- c(x1 - .5, max(x1) + .5)
-tbl_transfer <- crossing(x1, x2) %>% mutate(category = fct_rev(factor(x1 > x2, labels = c(1, 0))))
+xs <- seq(1, 10, by = 1)
+tbl_transfer <- crossing(x1 = xs, x2 = xs) %>% mutate(category = fct_rev(factor(x1 > x2, labels = c(1, 0))))
 l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
 plot_grid(tbl_transfer) + geom_abline()
 
@@ -266,12 +267,13 @@ tbl_inb_upsample <- l_tbl_upsample_inb %>% reduce(rbind) %>%
   group_by(x1, x2, category) %>%
   count() %>% dplyr::select(-n) %>%
   ungroup() %>%
-  mutate(trial_id = seq(1, nrow(.)))
+  mutate(
+    trial_id = seq(1, nrow(.)),
+    x1 = x1 + rnorm(nrow(.), 0, .01),
+    x2 = x2 + rnorm(nrow(.), 0, .01)
+    )
 plot_grid(tbl_inb_upsample %>% mutate(category = factor(category))) + geom_abline()
 params <- c(c = 1, w = .5, bias = .5)
-
-
-gcm_likelihood_no_forgetting(params, tbl_transfer, tbl_inb, n_feat = 2, d_measure = 1)
 
 
 add_sample <- function(tbl_new_sample, tbl_base, params, tbl_transfer, n_feat, d_measure) {
@@ -285,16 +287,20 @@ add_sample <- function(tbl_new_sample, tbl_base, params, tbl_transfer, n_feat, d
 # possible solution: first, upsample sufficient number of data points (e.g., 50)
 # then, do a constrained optimization with n ranging between 0 and that number (i.e., 50)
 
-importance_sampling <- function(l_new_samples, tbl_inb_plus, params, tbl_transfer, n_feat, d_measure, n_max = 10) {
+importance_sampling <- function(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat, d_measure, n_max = 10) {
   future::plan(multisession, workers = future::availableCores() - 2)
-  
+  l_samples <- l_new_samples
   # sequential importance sampling
   for (i in 1:n_max) {
-    v_importance <- future_map_dbl(l_new_samples, add_sample, tbl_base = tbl_inb_plus, params = params, tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1)
+    v_importance <- future_map_dbl(l_samples, add_sample, tbl_base = tbl_inb_plus, params = params, tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1)
     tbl_importance$importance <- v_importance
     # pick best imagined data point
-    tbl_importance <- tbl_importance %>% mutate(rank_importance = rank(importance)) %>% arrange(rank_importance)
+    tbl_importance <- tbl_importance %>% mutate(rank_importance = rank(importance, ties.method = "min"))
     tbl_inb_plus <- rbind(tbl_inb_plus, tbl_importance %>% dplyr::filter(rank_importance == 1) %>% dplyr::select(x1, x2, category))
+    # exclude sampled points from sampling set
+    idx_chosen_point <- which.min(v_importance)
+    tbl_importance <- tbl_importance[-idx_chosen_point,]
+    l_samples <- l_samples[-idx_chosen_point]
   }
   
   future::plan("default")
@@ -305,17 +311,18 @@ tbl_inb_plus <- tbl_inb %>% dplyr::select(x1, x2, category)
 tbl_importance <- tbl_inb_upsample
 l_new_samples <- split(tbl_inb_upsample %>% dplyr::select(-trial_id), tbl_inb_upsample$trial_id)
 
-tbl_important_samples_2 <- importance_sampling(l_new_samples, tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 2)
+tbl_important_samples_2 <- importance_sampling(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 2)
 tbl_important_samples_2$is_new <- 1
 tbl_important_samples_2$is_new[(nrow(tbl_inb) + 1) : nrow(tbl_important_samples_2)] <- 5
 
-tbl_important_samples_10 <- importance_sampling(l_new_samples, tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 10)
+tbl_important_samples_10 <- importance_sampling(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 10)
 tbl_important_samples_10$is_new <- 1
 tbl_important_samples_10$is_new[(nrow(tbl_inb) + 1) : nrow(tbl_important_samples_10)] <- 5
 
 
 pl_points_obs <- plot_grid(tbl_inb %>% mutate(category = factor(category))) + 
   geom_abline() + ggtitle("Observed")
+pl_points_transfer <- plot_grid(tbl_transfer) + geom_abline() + ggtitle("Transfer")
 pl_points_importance_2 <- plot_grid(tbl_important_samples_2) + geom_abline() +
   geom_point(aes(size = is_new), shape = 1) +
   scale_size_continuous(guide = "none") +
@@ -325,7 +332,7 @@ pl_points_importance_10 <- plot_grid(tbl_important_samples_10) + geom_abline() +
   scale_size_continuous(guide = "none") +
   ggtitle("Add Ten Samples")
 
-grid.draw(arrangeGrob(pl_points_obs, pl_points_importance_2, pl_points_importance_10, nrow = 1))
+grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance_2, pl_points_importance_10, nrow = 2))
 
 
 
