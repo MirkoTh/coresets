@@ -144,17 +144,6 @@ tbl_inb <- tbl_x_ii %>%
   )
 plot_grid(tbl_inb) + geom_abline()
 
-points_new <- tibble(
-  x1 = seq(1.5, 9.5, by = 1),
-  x2 = x1 + .5,
-  category = 3
-)
-
-plot_grid(rbind(tbl_inb %>% dplyr::select(-c(cat_structure, trial_id)), points_new %>% mutate(category = factor(category)))) + geom_abline()
-
-gcm_base(points_new[1, c("x1", "x2")], tbl-inb, c = 1, w = c(.5, .5), delta = 0, d_measure = 1)
-
-gcm_base(tibble(x1 = 2, x2 = 3), tbl_inb, c = 1, w = .5, delta = 0, d_measure = 1)
 # for one category
 categories <- c(0, 1)
 ns_upsample <- c(0, 1000)
@@ -166,7 +155,7 @@ tbl_inb_upsample <- l_tbl_upsample_inb %>% reduce(rbind) %>%
   ungroup() %>%
   mutate(trial_id = seq(1, nrow(.)))
 
-pl_inb <- plot_grid(tbl_inb %>% mutate(category = factor(category))) + ggtitle("Stimuli")
+pl_inb <- plot_grid(tbl_inb %>% mutate(category = factor(category))) + ggtitle("Stimuli") + geom_abline()
 pl_inb_up <- plot_grid(tbl_inb_upsample %>% mutate(category = factor(category))) + ggtitle("Upsampled")
 grid.draw(arrangeGrob(pl_inb, pl_inb_up, nrow = 1))
 
@@ -195,6 +184,61 @@ gcm_base(tibble(x1 = 2.5, x2 = 4), tbl_inb_upsample, 2, c = 1, w = .5, bias = 1/
 # pick the best point and ... --> repeat nr data points upsampled
 
 
-  
+
+# create 10 x 10 grid of data points
+x1 <- seq(1.5, 10.5, by = 1)
+x2 <- c(x1 - .5, max(x1) + .5)
+tbl_transfer <- crossing(x1, x2) %>% mutate(category = fct_rev(factor(x1 > x2, labels = c(1, 0))))
+l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
+plot_grid(tbl_transfer) + geom_abline()
+
+gcm_base(tbl_transfer[10, c("x1", "x2")], tbl_inb, n_feat = 2, c = 1, w = .5, bias = .5, delta = 0, d_measure = 1)
+
+
+# base model with bias term = .5
+l_category_probs.5 <- map(l_transfer_x, gcm_base, tbl_x = tbl_inb, n_feat = 2, c = 1, w = .5, bias = .5, delta = 0, d_measure = 1)
+tbl_category_probs.5 <- cbind(
+  tbl_transfer, 
+  as_tibble(as.data.frame(reduce(l_category_probs.5, rbind)))
+) %>% as_tibble()
+tbl_category_probs.5$prob_error <- pmap_dbl(
+  tbl_category_probs.5[, c("0", "1", "category")],
+  ~ 1 - c(..1, ..2)[as.numeric(as.character(..3)) + 1]
+  )
+pl_gcm_baseline.5 <- plot_grid(tbl_category_probs.5) +
+  geom_tile(aes(fill = prob_error), alpha = .5) +
+  scale_fill_gradient(name = "Prob. Error", low = "white", high = "tomato", limits = c(0, 1)) + 
+  geom_abline() + ggtitle("Baseline Classification, Bias = .5")
+
+# base model with bias term = .1
+l_category_probs.1 <- map(l_transfer_x, gcm_base, tbl_x = tbl_inb, n_feat = 2, c = 1, w = .5, bias = .1, delta = 0, d_measure = 1)
+tbl_category_probs.1 <- cbind(
+  tbl_transfer, 
+  as_tibble(as.data.frame(reduce(l_category_probs.1, rbind)))
+) %>% as_tibble()
+tbl_category_probs.1$prob_error <- pmap_dbl(
+  tbl_category_probs.1[, c("0", "1", "category")],
+  ~ 1 - c(..1, ..2)[as.numeric(as.character(..3)) + 1]
+)
+pl_gcm_baseline.1 <- plot_grid(tbl_category_probs.1) +
+  geom_tile(aes(fill = prob_error), alpha = .5) +
+  scale_fill_gradient(name = "Prob. Error", low = "white", high = "tomato", limits = c(0, 1)) + 
+  geom_abline() + ggtitle("Baseline Classification, Bias = .1")
+
+# plot together
+grid.draw(arrangeGrob(pl_inb, pl_gcm_baseline.5, pl_gcm_baseline.1, nrow = 1))
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
