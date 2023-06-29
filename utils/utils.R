@@ -130,9 +130,9 @@ gcm_base(x_new, tbl_upsample, 2, c, w, 0, d_measure)
 tbl_x_ii_inb$response <- tbl_x_ii_inb$category
 
 # category 0 example
-gcm_base(tbl_x_ii_inb[1, c("x1", "x2")], tbl_x_ii_inb[-1, ], 2, c = .5, w = c(.5, .5), 0, d_measure = 1)
+gcm_base(tbl_x_ii_inb[1, c("x1", "x2")], tbl_x_ii_inb[-1, ], 2, c = .5, w = c(.5, .5), .5, 0, d_measure = 1)
 # category 1 example
-gcm_base(tbl_x_ii_inb[17, c("x1", "x2")], tbl_x_ii_inb, 2, c = 3, w = c(.001, .999), 0, d_measure = 1)
+gcm_base(tbl_x_ii_inb[17, c("x1", "x2")], tbl_x_ii_inb, 2, c = 3, w = c(.001, .999), .5, 0, d_measure = 1)
 
 
 # example using inbalanced data set sequentially presenting data
@@ -175,7 +175,7 @@ gcm_base(tibble(x1 = 2.5, x2 = 4), tbl_inb_upsample, 2, c = 1, w = .5, bias = 1/
 # and then rank sampled data points according to their importance for the categorization problem
 # importance sampling has to be done sequentially, otherwise points from the same neighbourhood will be sampled
 # only keep the n most important data points
-# adjust bias parameter accodingly, such that ratio of ndata(cat_0)/ndata(cat_1) is put into bias parameter
+# adjust bias parameter accordingly, such that ratio of ndata(cat_0)/ndata(cat_1) is put into bias parameter
 # e.g., cat0 50, cat1 100 --> bias = c(.66, .33)
 
 # upsampling
