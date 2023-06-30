@@ -146,7 +146,7 @@ plot_grid(tbl_inb) + geom_abline()
 
 # for one category
 categories <- c(0, 1)
-ns_upsample <- c(0, 1000)
+ns_upsample <- c(0, 100)
 
 l_tbl_upsample_inb <- map2(categories, ns_upsample, upsample, tbl_x = tbl_inb)
 tbl_inb_upsample <- l_tbl_upsample_inb %>% reduce(rbind) %>% 
@@ -333,6 +333,34 @@ pl_points_importance_10 <- plot_grid(tbl_important_samples_10) + geom_abline() +
   ggtitle("Add Ten Samples")
 
 grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance_2, pl_points_importance_10, nrow = 2))
+
+
+remove_sample <- function(rwn_remove, tbl_base, params, tbl_transfer, n_feat, d_measure) {
+  gcm_likelihood_no_forgetting(params, tbl_transfer, tbl_x = tbl_base[-rwn_remove, ] %>% mutate(trial_id = 1:(nrow(tbl_base) - 1)), n_feat = 2, d_measure = 1)
+}
+
+
+
+importance_downsampling <- function(tbl_inb_plus, params, tbl_transfer, n_feat, d_measure, n_max = 10) {
+  future::plan(multisession, workers = future::availableCores() - 2)
+  # sequential importance sampling
+  tbl_drop <- tbl_inb_plus
+  while (nrow(tbl_drop) > n_max) {
+    v_importance <- future_map_dbl(1:nrow(tbl_drop), remove_sample, tbl_base = tbl_drop, params = params, tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1)
+    tbl_drop$importance <- v_importance
+    # pick best imagined data point
+    tbl_drop <- tbl_drop %>% mutate(rank_importance = rank(importance, ties.method = "min"))
+    # exclude sampled points from sampling set
+    idx_chosen_point <- which.min(v_importance)
+    tbl_drop <- tbl_drop[-idx_chosen_point,]
+  }
+  
+  future::plan("default")
+  return(tbl_drop)
+}
+
+plot_grid(tbl_drop)
+
 
 
 
