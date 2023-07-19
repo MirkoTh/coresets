@@ -4,6 +4,7 @@ library(gridExtra)
 library(smotefamily)
 library(furrr)
 library(MASS)
+library(docstring)
 
 path_load <- c("utils/utils.R")
 walk(path_load, source)
@@ -15,8 +16,8 @@ walk(path_load, source)
 # information integration condition using the identity function as decision boundary
 
 # squares
-x1 <- seq(1, 10, by = 1)
-x2 <- seq(1, 10, by = 1)
+x1 <- seq(1, 6, by = 1)
+x2 <- seq(1, 6, by = 1)
 tbl_x_ii <- crossing(x1, x2)
 tbl_x_ii$category <- factor(as.numeric(tbl_x_ii$x1 < tbl_x_ii$x2))
 tbl_x_ii <- tbl_x_ii[!(tbl_x_ii$x1 == tbl_x_ii$x2), ]
@@ -34,7 +35,7 @@ tbl_x_sq$cat_structure <- "square"
 tbl_x_sq$trial_id <- seq(1, nrow(tbl_x_sq), by = 1)
 
 
-pl_sq <- plot_grid(tbl_x_sq) + geom_hline(yintercept = 5.5) + geom_vline(xintercept = 5.5)
+pl_sq <- plot_grid(tbl_x_sq) + geom_hline(yintercept = mean(tbl_x_sq$x1)) + geom_vline(xintercept = mean(tbl_x_sq$x2))
 
 grid.draw(arrangeGrob(pl_sq, pl_ii, nrow = 1))
 
@@ -46,7 +47,7 @@ grid.draw(arrangeGrob(pl_sq, pl_ii, nrow = 1))
 tbl_x_ii_inb <- tbl_x_ii %>% 
   filter(
     category %in% c(0) |
-      (category %in% c(1) & x1 %in% c(1, 9) & x2 %in% c(2, 10))
+      (category %in% c(1) & x1 %in% c(1, 5) & x2 %in% c(2, 6))
     #| (category == 1 & x1 == 8 & x2 == 3) 
     # | (category == 2 & x1 == 3 & x2 == 8) 
   ) %>% mutate(
@@ -121,8 +122,9 @@ pl_inb <- plot_grid(tbl_inb %>% mutate(category = factor(category))) + ggtitle("
 # the base models use all presented data points to predict on the transfer set
 
 # create 10 x 10 grid of data points as a transfer set
-xs <- seq(1, 10, by = 1)
-tbl_transfer <- crossing(x1 = xs, x2 = xs) %>% mutate(category = fct_rev(factor(x1 > x2, labels = c(1, 0))))
+x1 <- seq(.5, 5.5, by = 1)
+x2 <- seq(1, 6, by = 1)
+tbl_transfer <- crossing(x1 = x1, x2 = x2) %>% mutate(category = fct_rev(factor(x1 > x2, labels = c(1, 0))))
 l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
 plot_grid(tbl_transfer) + geom_abline()
 
@@ -179,7 +181,7 @@ gcm_base(x_new, tbl_x, 2, c, w, bias, 0, d_measure)
 
 
 plot_grid(tbl_x) +
-  geom_abline() + coord_cartesian(xlim = c(1, 10), ylim = c(1, 10))
+  geom_abline() + coord_cartesian(xlim = c(1, max(tbl_x$x1)), ylim = c(1, max(tbl_x$x2)))
 
 # for one category
 categories <- c(0, 1)
@@ -279,31 +281,84 @@ tbl_inb_upsample <- l_tbl_upsample_inb %>% reduce(rbind) %>%
     x2 = x2 + rnorm(nrow(.), 0, .01)
   )
 plot_grid(tbl_inb_upsample %>% mutate(category = factor(category))) + geom_abline()
-params <- c(c = 1, w = .5, bias = .5)
+
+
+
+pl_train <- plot_grid(tbl_inb_plus)
+pl_transfer <- plot_grid(tbl_transfer)
+grid.draw(arrangeGrob(pl_train, pl_transfer, nrow = 1))
 
 
 # calculate importance given set of data points
-tbl_inb_plus <- tbl_inb %>% dplyr::select(x1, x2, category)
+tbl_inb_plus <- tbl_inb %>% dplyr::select(x1, x2, category) %>%
+  mutate(
+    x1 = x1 + rnorm(nrow(.), 0, .01),
+    x2 = x2 + rnorm(nrow(.), 0, .01)
+  )
+
+
+# params have to be chosen
+# first fit the model on the presented data and then fix the parameters
+# then up- or downsample
+params <- c(c = 1, w = .5, bias = .00012)
+params <- pmap(list(params, c(0, .01, .0001), c(10, .99, .9999)), upper_and_lower_bounds)
+params_init <- params
+
+t_start <- Sys.time()
+results_pre <- optim(
+  params_init,
+  gcm_likelihood_no_forgetting,
+  tbl_transfer = tbl_transfer,
+  tbl_x = tbl_inb_plus %>% mutate(trial_id = 1:nrow(tbl_inb_plus)),
+  n_feat = 2,
+  d_measure = 1
+)
+t_end <- Sys.time()
+round(t_end - t_start, 1)
+
+params_fin <- pmap(list(results_pre$par, c(0, .01, .0001), c(10, .99, .9999)), upper_and_lower_bounds_revert)
+
+
+
+gcm_likelihood_no_forgetting(params, tbl_transfer, tbl_inb_plus %>% mutate(trial_id = 1:nrow(tbl_inb_plus)), 2, 1)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 tbl_importance <- tbl_inb_upsample
 l_new_samples <- split(tbl_inb_upsample %>% dplyr::select(-trial_id), tbl_inb_upsample$trial_id)
 
-tbl_important_samples_2 <- importance_upsampling(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 2)
-tbl_important_samples_2$is_new <- 1
-tbl_important_samples_2$is_new[(nrow(tbl_inb) + 1) : nrow(tbl_important_samples_2)] <- 5
+tbl_important_up_2 <- importance_upsampling(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 2)
+tbl_important_up_2$is_new <- 1
+tbl_important_up_2$is_new[(nrow(tbl_inb) + 1) : nrow(tbl_important_up_2)] <- 5
 
-tbl_important_samples_10 <- importance_upsampling(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 10)
-tbl_important_samples_10$is_new <- 1
-tbl_important_samples_10$is_new[(nrow(tbl_inb) + 1) : nrow(tbl_important_samples_10)] <- 5
+tbl_important_up_10 <- importance_upsampling(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 10)
+tbl_important_up_10$is_new <- 1
+tbl_important_up_10$is_new[(nrow(tbl_inb) + 1) : nrow(tbl_important_up_10)] <- 5
 
 
 pl_points_obs <- plot_grid(tbl_inb %>% mutate(category = factor(category))) + 
   geom_abline() + ggtitle("Observed")
 pl_points_transfer <- plot_grid(tbl_transfer) + geom_abline() + ggtitle("Transfer")
-pl_points_importance_2 <- plot_grid(tbl_important_samples_2) + geom_abline() +
+pl_points_importance_2 <- plot_grid(tbl_important_up_2) + geom_abline() +
   geom_point(aes(size = is_new), shape = 1) +
   scale_size_continuous(guide = "none") +
   ggtitle("Add Two Samples")
-pl_points_importance_10 <- plot_grid(tbl_important_samples_10) + geom_abline() +
+pl_points_importance_10 <- plot_grid(tbl_important_up_10) + geom_abline() +
   geom_point(aes(size = is_new), shape = 1) +
   scale_size_continuous(guide = "none") +
   ggtitle("Add Ten Samples")
@@ -312,13 +367,51 @@ grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance_2,
 
 
 
+tbl_drop_imb <- tbl_inb_plus
+v_importance <- future_map_dbl(
+  1:nrow(tbl_drop_imb), remove_sample, tbl_base = tbl_drop_imb, params = params, 
+  tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1,
+  f_likelihood = gcm_likelihood_no_forgetting
+)
+tbl_drop_imb$importance <- v_importance
+# pick best imagined data point
 
-plot_grid(tbl_drop)
-
-# todos
-# up- and downsampling only for relevant category (i.e., lo freq and hi freq, respectively)
-# assumption: up- and downsampling are achieved using originally presented stimuli
 
 
 
+# importance of a data point depends on the distribution of data across categories
+# check: why is overall -2*ll worse with more training data points? this is odd
+tbl_drop_imb <- tbl_drop_imb %>% mutate(rank_importance = rank(importance, ties.method = "min"))
+pl_drop_imb <- ggplot(tbl_drop_imb, aes(round(x1, 0), round(x2, 0))) +
+  geom_tile(aes(fill = importance)) +
+  scale_fill_gradient2(low = "palegreen3", high = "black", midpoint = 138) +
+  labs(x = expression(x[1]), y = expression(x[2])) + theme_bw() +
+  geom_point(color = "white")
+
+tbl_drop_bal <- crossing(x1 = 1:10, x2 = 1:10) %>% mutate(category = as.factor(as.numeric(x1 > x2)))
+v_importance <- future_map_dbl(
+  1:nrow(tbl_drop_bal), remove_sample, tbl_base = tbl_drop_bal, params = params, 
+  tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1,
+  f_likelihood = gcm_likelihood_no_forgetting
+)
+tbl_drop_bal$importance <- v_importance
+# pick best imagined data point
+pl_drop_bal <- ggplot(tbl_drop_bal, aes(round(x1, 0), round(x2, 0))) +
+  geom_tile(aes(fill = importance)) +
+  scale_fill_gradient2(low = "palegreen3", high = "dodgerblue2", midpoint = 353) +
+  labs(x = expression(x[1]), y = expression(x[2])) + theme_bw() +
+  geom_point()
+
+grid.draw(arrangeGrob(pl_drop_imb, pl_drop_bal, nrow = 1))
+
+
+tbl_important_down <- importance_downsampling(tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 45)
+tbl_removed <- left_join(tbl_inb_plus, tbl_important_down, by = c("x1", "x2", "category"))
+tbl_removed$is_removed <- 1
+tbl_removed$is_removed[is.na(tbl_removed$importance)] <- 5
+pl_points_down <- plot_grid(tbl_removed) + geom_abline() +
+  geom_point(aes(size = is_removed), shape = 1) +
+  geom_point(data = tbl_removed %>% filter(is_removed == 5), aes(x1, x2), color = "white") +
+  scale_size_continuous(guide = "none") +
+  ggtitle("Keep 45 Samples")
 
