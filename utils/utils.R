@@ -131,7 +131,7 @@ gcm_likelihood_no_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measu
   #' @param d_measure distance measure, 1 for city-block, 2 for euclidean
   #' @return negative 2 * summed log likelihood
   #' 
-  x <- pmap(list(x, c(0, 0, 0), c(100, 1, 1)), upper_and_lower_bounds_revert)
+  x <- pmap(list(x, c(0, .01, .0001), c(10, .99, .9999)), upper_and_lower_bounds_revert)
   l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
   l_category_probs <- map(l_transfer_x, gcm_base, tbl_x = tbl_x, n_feat = n_feat, c = x[[1]], w = x[[2]], bias = x[[3]], delta = 0, d_measure = d_measure)
   tbl_probs <- as.data.frame(reduce(l_category_probs, rbind)) %>% mutate(category = tbl_transfer$category)
@@ -155,7 +155,7 @@ gcm_likelihood_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measure)
   #' @param d_measure distance measure, 1 for city-block, 2 for euclidean
   #' @return negative 2 * summed log likelihood
   #' 
-  x <- pmap(list(x, c(0, 0, 0), c(100, 1, 1)), upper_and_lower_bounds_revert)
+  x <- pmap(list(x, c(0, .01, .0001), c(10, .99, .9999)), upper_and_lower_bounds_revert)
   l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
   l_category_probs <- map(l_transfer_x, gcm_base, tbl_x = tbl_x, n_feat = n_feat, c = x[[1]], w = x[[2]], bias = x[[3]], delta = x[[4]], d_measure = d_measure)
   tbl_probs <- as.data.frame(reduce(l_category_probs, rbind)) %>% mutate(category = tbl_transfer$category)
