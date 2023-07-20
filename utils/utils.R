@@ -134,9 +134,9 @@ gcm_likelihood_no_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measu
   x <- pmap(list(x, c(0, .01, .0001), c(10, .99, .9999)), upper_and_lower_bounds_revert)
   l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
   l_category_probs <- map(l_transfer_x, gcm_base, tbl_x = tbl_x, n_feat = n_feat, c = x[[1]], w = x[[2]], bias = x[[3]], delta = 0, d_measure = d_measure)
-  tbl_probs <- as.data.frame(reduce(l_category_probs, rbind)) %>% mutate(category = tbl_transfer$category)
+  tbl_probs <- as.data.frame(reduce(l_category_probs, rbind)) %>% mutate(response = tbl_transfer$response)
   tbl_probs$prob_correct <- pmap_dbl(
-    tbl_probs[, c("0", "1", "category")],
+    tbl_probs[, c("0", "1", "response")],
     ~ c(..1, ..2)[as.numeric(as.character(..3)) + 1]
   )
   ll <- log(tbl_probs$prob_correct)
@@ -158,9 +158,9 @@ gcm_likelihood_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measure)
   x <- pmap(list(x, c(0, .01, .0001), c(10, .99, .9999)), upper_and_lower_bounds_revert)
   l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
   l_category_probs <- map(l_transfer_x, gcm_base, tbl_x = tbl_x, n_feat = n_feat, c = x[[1]], w = x[[2]], bias = x[[3]], delta = x[[4]], d_measure = d_measure)
-  tbl_probs <- as.data.frame(reduce(l_category_probs, rbind)) %>% mutate(category = tbl_transfer$category)
+  tbl_probs <- as.data.frame(reduce(l_category_probs, rbind)) %>% mutate(response = tbl_transfer$response)
   tbl_probs$prob_correct <- pmap_dbl(
-    tbl_probs[, c("0", "1", "category")],
+    tbl_probs[, c("0", "1", "response")],
     ~ c(..1, ..2)[as.numeric(as.character(..3)) + 1]
   )
   ll <- log(tbl_probs$prob_correct)
@@ -243,4 +243,43 @@ upper_and_lower_bounds <- function(par, lo, hi) {
 
 upper_and_lower_bounds_revert <- function(par, lo, hi) {
   lo + ((hi - lo) / (1 + exp(-par)))
+}
+
+
+
+repeat_tibble <- function(tbl_df, n_reps) {
+  #' concatenate the same tibble several times
+  #' 
+  #' @description copy a tibble n_reps times and rbind it to the original tibble
+  #' @param tbl_df the tbl to be repeated
+  #' @param n_reps the number of times the tbl should be repeated
+  #' @return the new larger tibble
+  
+  i <- 1
+  tbl_df_new <- tbl_df
+  while (i < n_reps) {
+    tbl_df_new <- rbind(tbl_df_new, tbl_df)
+    i <- i + 1
+  }
+  return(tbl_df_new)
+}
+
+
+
+simulate_responses <- function(tbl_df) {
+  #' @description simulate responses for two categories with diagonal 
+  #' information integration structure
+  #' @param tbl_df the tbl with x1 and x2 coordinates
+  #' @return the same tbl with p_correct, accuracy, and responses added as columns
+  
+  tbl_df$x1_bd <- (tbl_df$x1 + tbl_df$x2) / 2
+  tbl_df$x2_bd <- tbl_df$x1_bd
+  tbl_df$d_bd <- sqrt((tbl_df$x1 - tbl_df$x1_bd) ^ 2 + (tbl_df$x2 - tbl_df$x2_bd) ^2)
+  tbl_df$p_correct <- 1 - exp(-tbl_df$d_bd)
+  tbl_df$accuracy <- rbernoulli(nrow(tbl_df), p = tbl_df$p_correct)
+  tbl_df$response <- pmap_dbl(
+    tbl_df[, c("category", "accuracy")], 
+    ~ ifelse(..2, as.numeric(as.character(..1)), abs(as.numeric(as.character(..1)) - 1))
+  )
+  return(tbl_df)
 }

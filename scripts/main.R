@@ -1,3 +1,5 @@
+rm(list = ls())
+
 library(tidyverse)
 library(grid)
 library(gridExtra)
@@ -114,9 +116,17 @@ grid.draw(arrangeGrob(pl_bl, l_smote[[1]], l_smote[[2]], l_smote[[3]], nrow = 2)
 tbl_inb <- tbl_x_ii %>% 
   filter(
     category %in% c(0) |
-      (category %in% c(1) & x1 %in% seq(1, 9, by = 4) & x2 %in% seq(2, 10, by = 4))
+      (category %in% c(1) & x1 %in% seq(1, 5, by = 4) & x2 %in% seq(2, 6, by = 4))
   )
-pl_inb <- plot_grid(tbl_inb %>% mutate(category = factor(category))) + ggtitle("Stimuli") + geom_abline()
+tbl_inb_weighted <- tbl_inb %>%
+  rbind(
+    repeat_tibble(
+      tbl_inb %>% filter(category == 1), 4
+    )
+  )
+
+
+pl_inb <- plot_grid(tbl_inb_weighted %>% mutate(category = factor(category))) + ggtitle("Stimuli") + geom_abline()
 
 
 # the base models use all presented data points to predict on the transfer set
@@ -127,6 +137,15 @@ x2 <- seq(1, 6, by = 1)
 tbl_transfer <- crossing(x1 = x1, x2 = x2) %>% mutate(category = fct_rev(factor(x1 > x2, labels = c(1, 0))))
 l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
 plot_grid(tbl_transfer) + geom_abline()
+
+# simulate response
+
+
+
+tbl_inb <- simulate_responses(tbl_inb)
+tbl_inb_weighted <- simulate_responses(tbl_inb_weighted)
+tbl_transfer <- simulate_responses(tbl_transfer)
+
 
 
 # base model with bias term = .5
@@ -218,6 +237,7 @@ tbl_inb_upsample <- l_tbl_upsample_inb %>% reduce(rbind) %>%
   ungroup() %>%
   mutate(
     trial_id = seq(1, nrow(.))
+    
   )
 
 pl_inb <- plot_grid(tbl_inb %>% mutate(category = factor(category))) + ggtitle("Stimuli") + geom_abline()
@@ -300,7 +320,15 @@ tbl_inb_plus <- tbl_inb %>% dplyr::select(x1, x2, category) %>%
 # params have to be chosen
 # first fit the model on the presented data and then fix the parameters
 # then up- or downsample
-params <- c(c = 1, w = .5, bias = .00012)
+
+
+# to be tested
+# does it make a difference on the specific values of the fit model
+# which data points are considered to be important?
+# e.g., 1, .5, .5 vs. a model fit on a given set of data (as below)
+
+tbl_inb_weighted <- tbl_inb_weighted %>% mutate(trial_id = 1:nrow(tbl_inb_weighted))
+params <- c(c = 1, w = .5, bias = .5)
 params <- pmap(list(params, c(0, .01, .0001), c(10, .99, .9999)), upper_and_lower_bounds)
 params_init <- params
 
@@ -309,34 +337,27 @@ results_pre <- optim(
   params_init,
   gcm_likelihood_no_forgetting,
   tbl_transfer = tbl_transfer,
-  tbl_x = tbl_inb_plus %>% mutate(trial_id = 1:nrow(tbl_inb_plus)),
+  tbl_x = tbl_inb_weighted,#, tbl_inb_weighted,
   n_feat = 2,
   d_measure = 1
 )
 t_end <- Sys.time()
 round(t_end - t_start, 1)
 
-params_fin <- pmap(list(results_pre$par, c(0, .01, .0001), c(10, .99, .9999)), upper_and_lower_bounds_revert)
+params_fin <- list()
+params_fin[["not_tf"]] <- pmap_dbl(list(results_pre$par, c(0, .01, .0001), c(10, .99, .9999)), upper_and_lower_bounds_revert)
+params_fin[["tf"]] <- results_pre$par
+params_ignorant <- list()
+params_ignorant[["tf"]] <- pmap_dbl(list(c(c = 1, w = .5, bias = .5), c(0, .01, .0001), c(10, .99, .9999)), upper_and_lower_bounds)
+params_ignorant[["not_tf"]] <- c(c = 1, w = .5, bias = .5)
 
 
 
-gcm_likelihood_no_forgetting(params, tbl_transfer, tbl_inb_plus %>% mutate(trial_id = 1:nrow(tbl_inb_plus)), 2, 1)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# training data
+# 15 vs. 3 examples, but number of presentations per category is fixed
+# 
+tbl_inb
+tbl_transfer
 
 
 tbl_importance <- tbl_inb_upsample
