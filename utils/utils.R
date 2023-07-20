@@ -121,7 +121,7 @@ upsample <- function(category_used, n_upsample, tbl_x) {
 }
 
 
-gcm_likelihood_no_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measure) {
+gcm_likelihood_no_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measure, lo, hi) {
   #' @description -2 * negative log likelihood of transfer set given training data
   #' and a gcm without a forgetting parameter (i.e., forgetting set to 0)
   #' @param x parameters
@@ -131,7 +131,7 @@ gcm_likelihood_no_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measu
   #' @param d_measure distance measure, 1 for city-block, 2 for euclidean
   #' @return negative 2 * summed log likelihood
   #' 
-  x <- pmap(list(x, c(0, .01, .0001), c(10, .99, .9999)), upper_and_lower_bounds_revert)
+  x <- pmap(list(x, lo, hi), upper_and_lower_bounds_revert)
   l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
   l_category_probs <- map(l_transfer_x, gcm_base, tbl_x = tbl_x, n_feat = n_feat, c = x[[1]], w = x[[2]], bias = x[[3]], delta = 0, d_measure = d_measure)
   tbl_probs <- as.data.frame(reduce(l_category_probs, rbind)) %>% mutate(response = tbl_transfer$response)
@@ -145,7 +145,7 @@ gcm_likelihood_no_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measu
 }
 
 
-gcm_likelihood_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measure) {
+gcm_likelihood_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measure, lo, hi) {
   #' @description -2 * negative log likelihood of transfer set given training data
   #' and a gcm with a forgetting parameter
   #' @param x parameters
@@ -155,7 +155,7 @@ gcm_likelihood_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measure)
   #' @param d_measure distance measure, 1 for city-block, 2 for euclidean
   #' @return negative 2 * summed log likelihood
   #' 
-  x <- pmap(list(x, c(0, .01, .0001), c(10, .99, .9999)), upper_and_lower_bounds_revert)
+  x <- pmap(list(x, lo, hi), upper_and_lower_bounds_revert)
   l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
   l_category_probs <- map(l_transfer_x, gcm_base, tbl_x = tbl_x, n_feat = n_feat, c = x[[1]], w = x[[2]], bias = x[[3]], delta = x[[4]], d_measure = d_measure)
   tbl_probs <- as.data.frame(reduce(l_category_probs, rbind)) %>% mutate(response = tbl_transfer$response)
@@ -169,25 +169,28 @@ gcm_likelihood_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measure)
 }
 
 
-add_sample <- function(tbl_new_sample, tbl_base, params, tbl_transfer, n_feat, d_measure, f_likelihood) {
+add_sample <- function(tbl_new_sample, tbl_base, params, tbl_transfer, n_feat, d_measure, f_likelihood, lo, hi) {
   #' @description evaluate likelihood on transfer/test set when a new sample is added to the training data
   f_likelihood(
     params, tbl_transfer, 
     tbl_x = rbind(tbl_base, tbl_new_sample) %>% mutate(trial_id = 1:(nrow(tbl_base) + 1)),
-    n_feat = 2, d_measure = 1
+    n_feat = 2, d_measure = 1, lo = lo, hi = hi
     )
 }
 
 
-remove_sample <- function(rwn_remove, tbl_base, params, tbl_transfer, n_feat, d_measure, f_likelihood) {
+remove_sample <- function(rwn_remove, tbl_base, params, tbl_transfer, n_feat, d_measure, f_likelihood, lo, hi) {
   #' @description evaluate likelihood on transfer/test set when one training example is removed
-  f_likelihood(params, tbl_transfer, tbl_x = tbl_base[-rwn_remove, ] %>% mutate(trial_id = 1:(nrow(tbl_base) - 1)), n_feat = 2, d_measure = 1)
+  f_likelihood(
+    params, tbl_transfer, tbl_x = tbl_base[-rwn_remove, ] %>% mutate(trial_id = 1:(nrow(tbl_base) - 1)),
+    n_feat = 2, d_measure = 1, lo = lo, hi = hi
+    )
 }
 
 
-importance_upsampling <- function(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat, d_measure, n_max = 10) {
+importance_upsampling <- function(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat, d_measure, lo, hi, n_max = 10) {
   #' @description add n_max most important upsampled data points to the training set
-  #' 
+
   future::plan(multisession, workers = future::availableCores() - 2)
   l_samples <- l_new_samples
   # sequential importance sampling
@@ -195,12 +198,12 @@ importance_upsampling <- function(l_new_samples, tbl_importance, tbl_inb_plus, p
     v_importance <- future_map_dbl(
       l_samples, add_sample, tbl_base = tbl_inb_plus, params = params, 
       tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1,
-      f_likelihood = gcm_likelihood_no_forgetting
+      f_likelihood = gcm_likelihood_no_forgetting, lo = lo, hi = hi
       )
     tbl_importance$importance <- v_importance
     # pick best imagined data point
     tbl_importance <- tbl_importance %>% mutate(rank_importance = rank(importance, ties.method = "min"))
-    tbl_inb_plus <- rbind(tbl_inb_plus, tbl_importance %>% dplyr::filter(rank_importance == 1) %>% dplyr::select(x1, x2, category))
+    tbl_inb_plus <- rbind(tbl_inb_plus, tbl_importance %>% dplyr::filter(rank_importance == 1) %>% dplyr::select(x1, x2, category, response))
     # exclude sampled points from sampling set
     idx_chosen_point <- which.min(v_importance)
     tbl_importance <- tbl_importance[-idx_chosen_point,]
@@ -212,9 +215,9 @@ importance_upsampling <- function(l_new_samples, tbl_importance, tbl_inb_plus, p
 }
 
 
-importance_downsampling <- function(tbl_inb_plus, params, tbl_transfer, n_feat, d_measure, n_max = 10) {
+importance_downsampling <- function(tbl_inb_plus, params, tbl_transfer, n_feat, d_measure, lo, hi, n_max = 10) {
   #' @description remove n_max least important upsampled data points from the training set
-  #' 
+
   future::plan(multisession, workers = future::availableCores() - 2)
   # sequential importance sampling
   tbl_drop <- tbl_inb_plus
@@ -222,7 +225,7 @@ importance_downsampling <- function(tbl_inb_plus, params, tbl_transfer, n_feat, 
     v_importance <- future_map_dbl(
       1:nrow(tbl_drop), remove_sample, tbl_base = tbl_drop, params = params, 
       tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1,
-      f_likelihood = gcm_likelihood_no_forgetting
+      f_likelihood = gcm_likelihood_no_forgetting, lo = lo, hi = hi
       )
     tbl_drop$importance <- v_importance
     # pick best imagined data point
@@ -271,7 +274,7 @@ simulate_responses <- function(tbl_df) {
   #' information integration structure
   #' @param tbl_df the tbl with x1 and x2 coordinates
   #' @return the same tbl with p_correct, accuracy, and responses added as columns
-  
+
   tbl_df$x1_bd <- (tbl_df$x1 + tbl_df$x2) / 2
   tbl_df$x2_bd <- tbl_df$x1_bd
   tbl_df$d_bd <- sqrt((tbl_df$x1 - tbl_df$x1_bd) ^ 2 + (tbl_df$x2 - tbl_df$x2_bd) ^2)
@@ -282,4 +285,19 @@ simulate_responses <- function(tbl_df) {
     ~ ifelse(..2, as.numeric(as.character(..1)), abs(as.numeric(as.character(..1)) - 1))
   )
   return(tbl_df)
+}
+
+
+
+add_jitter <- function(tbl_df) {
+  #' @description simulate responses for two categories with diagonal 
+  #' information integration structure
+  #' @param tbl_df the tbl with x1 and x2 coordinates
+  #' @return the same tbl with p_correct, accuracy, and responses added as columns
+
+  tbl_df %>% dplyr::select(x1, x2, category) %>%
+    mutate(
+      x1 = x1 + rnorm(nrow(.), 0, .01),
+      x2 = x2 + rnorm(nrow(.), 0, .01)
+    )
 }

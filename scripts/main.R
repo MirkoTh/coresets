@@ -71,45 +71,6 @@ tbl_samples_ii <- reduce(l_samples_ii, rbind)
 plot_grid(tbl_samples_ii) + geom_abline()
 
 
-
-# Upsampling --------------------------------------------------------------
-
-
-# borderline smote
-m_smpl_bl <- smotefamily::BLSMOTE(
-  tbl_samples_ii[, c("x1", "x2")], 
-  as_vector(tbl_samples_ii$category),
-  K = 2
-)
-
-tbl_bl <- m_smpl_bl$syn_data
-colnames(tbl_bl) <- colnames(tbl_x_sq)[1:3]
-tbl_bl <- tbl_samples_ii %>% rbind(tbl_bl)
-pl_bl <- plot_grid(tbl_bl) + geom_abline() + ggtitle("Borderline Sampling")
-
-
-# smote
-smote_k <- function(k) {
-  m_smpl_smote <- smotefamily::SMOTE(
-    tbl_samples_ii[, c("x1", "x2")], 
-    as_vector(tbl_samples_ii$category),
-    K = k
-  )
-  
-  tbl_smote <- m_smpl_smote$syn_data
-  colnames(tbl_smote) <- colnames(tbl_x_sq)[1:3]
-  tbl_smote <- tbl_samples_ii %>% rbind(tbl_smote)
-  plot_grid(tbl_smote) + geom_abline() + 
-    ggtitle(str_c("Upsampling, K = ", k))
-}
-
-
-l_smote <- map(c(5, 10, 20), smote_k)
-
-grid.draw(arrangeGrob(pl_bl, l_smote[[1]], l_smote[[2]], l_smote[[3]], nrow = 2))
-  
-
-
 # Base Models -------------------------------------------------------------
 
 
@@ -117,13 +78,15 @@ tbl_inb <- tbl_x_ii %>%
   filter(
     category %in% c(0) |
       (category %in% c(1) & x1 %in% seq(1, 5, by = 4) & x2 %in% seq(2, 6, by = 4))
-  )
+  ) %>% mutate(trial_id = sample(1:nrow(.), nrow(.), replace = FALSE)) %>%
+  arrange(trial_id)
 tbl_inb_weighted <- tbl_inb %>%
   rbind(
     repeat_tibble(
       tbl_inb %>% filter(category == 1), 4
     )
-  )
+  ) %>% mutate(trial_id = sample(1:nrow(.), nrow(.), replace = FALSE)) %>%
+  arrange(trial_id)
 
 
 pl_inb <- plot_grid(tbl_inb_weighted %>% mutate(category = factor(category))) + ggtitle("Stimuli") + geom_abline()
@@ -134,14 +97,24 @@ pl_inb <- plot_grid(tbl_inb_weighted %>% mutate(category = factor(category))) + 
 # create 10 x 10 grid of data points as a transfer set
 x1 <- seq(.5, 5.5, by = 1)
 x2 <- seq(1, 6, by = 1)
-tbl_transfer <- crossing(x1 = x1, x2 = x2) %>% mutate(category = fct_rev(factor(x1 > x2, labels = c(1, 0))))
+tbl_transfer <- crossing(x1 = x1, x2 = x2) %>% 
+  mutate(
+    category = fct_rev(factor(x1 > x2, labels = c(1, 0))),
+    trial_id = sample(1:nrow(.), nrow(.), replace = FALSE)
+    ) %>% arrange(trial_id)
 l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
 plot_grid(tbl_transfer) + geom_abline()
 
 # simulate response
 
+# add a bit of noise to circumvent ties in rank ordering
+# when calculating importances
 
+tbl_inb[, c("x1", "x2", "category")] <- add_jitter(tbl_inb)
+tbl_inb_weighted[, c("x1", "x2", "category")] <- add_jitter(tbl_inb_weighted)
+tbl_transfer[, c("x1", "x2", "category")] <- add_jitter(tbl_transfer)
 
+set.seed(4390)
 tbl_inb <- simulate_responses(tbl_inb)
 tbl_inb_weighted <- simulate_responses(tbl_inb_weighted)
 tbl_transfer <- simulate_responses(tbl_transfer)
@@ -184,6 +157,7 @@ pl_gcm_baseline.1 <- plot_grid(tbl_category_probs.1) +
 grid.draw(arrangeGrob(pl_inb, pl_gcm_baseline.5, pl_gcm_baseline.1, nrow = 1))
 
 
+
 # Upsampling Example ------------------------------------------------------
 
 x_new <- tibble(x1 = 4.5, x2 = 4.7)
@@ -222,33 +196,6 @@ gcm_base(x_new, tbl_upsample, 2, c, w, 0, d_measure)
 # this makes sense only in the non-decay model, because importance or weight is given by the decay parameter
 # number of finally used items is controlled by capacity parameter
 
-# example using imbalanced data set sequentially presenting data
-
-
-
-# upsample only the minority category
-categories <- c(0, 1)
-ns_upsample <- c(0, 100)
-
-l_tbl_upsample_inb <- map2(categories, ns_upsample, upsample, tbl_x = tbl_inb)
-tbl_inb_upsample <- l_tbl_upsample_inb %>% reduce(rbind) %>% 
-  group_by(x1, x2, category) %>%
-  count() %>% dplyr::select(-n) %>%
-  ungroup() %>%
-  mutate(
-    trial_id = seq(1, nrow(.))
-    
-  )
-
-pl_inb <- plot_grid(tbl_inb %>% mutate(category = factor(category))) + ggtitle("Stimuli") + geom_abline()
-pl_inb_up <- plot_grid(tbl_inb_upsample %>% mutate(category = factor(category))) + ggtitle("Upsampled")
-grid.draw(arrangeGrob(pl_inb, pl_inb_up, nrow = 1))
-
-
-gcm_base(tibble(x1 = 2.5, x2 = 4), tbl_inb, 2, c = 1, w = .5, bias = 1/3, delta = 0, d_measure = 1)
-gcm_base(tibble(x1 = 2.5, x2 = 4), tbl_inb_upsample, 2, c = 1, w = .5, bias = 1/3, delta = 0, d_measure = 1)
-
-
 
 # todo
 # create grid of 10 x 10 values crossing x1 and x2
@@ -285,12 +232,14 @@ gcm_base(tibble(x1 = 2.5, x2 = 4), tbl_inb_upsample, 2, c = 1, w = .5, bias = 1/
 # then, do a constrained optimization with n ranging between 0 and that number (i.e., 50)
 
 
+
+# first, upsample sufficient number of data points for the minority category
 # for one category
 categories <- c(0, 1)
-ns_upsample <- c(0, 100)
+ns_upsample <- c(0, 10)
 
 l_tbl_upsample_inb <- map2(categories, ns_upsample, upsample, tbl_x = tbl_inb)
-# add small amount of noise to circumvent ties in rank odering
+# add small amount of noise to circumvent ties in rank ordering
 tbl_inb_upsample <- l_tbl_upsample_inb %>% reduce(rbind) %>% 
   group_by(x1, x2, category) %>%
   count() %>% dplyr::select(-n) %>%
@@ -298,23 +247,19 @@ tbl_inb_upsample <- l_tbl_upsample_inb %>% reduce(rbind) %>%
   mutate(
     trial_id = seq(1, nrow(.)),
     x1 = x1 + rnorm(nrow(.), 0, .01),
-    x2 = x2 + rnorm(nrow(.), 0, .01)
-  )
+    x2 = x2 + rnorm(nrow(.), 0, .01),
+    response = category
+    )
 plot_grid(tbl_inb_upsample %>% mutate(category = factor(category))) + geom_abline()
 
 
 
-pl_train <- plot_grid(tbl_inb_plus)
+pl_train <- plot_grid(tbl_inb)
 pl_transfer <- plot_grid(tbl_transfer)
 grid.draw(arrangeGrob(pl_train, pl_transfer, nrow = 1))
 
 
-# calculate importance given set of data points
-tbl_inb_plus <- tbl_inb %>% dplyr::select(x1, x2, category) %>%
-  mutate(
-    x1 = x1 + rnorm(nrow(.), 0, .01),
-    x2 = x2 + rnorm(nrow(.), 0, .01)
-  )
+
 
 
 # params have to be chosen
@@ -327,9 +272,13 @@ tbl_inb_plus <- tbl_inb %>% dplyr::select(x1, x2, category) %>%
 # which data points are considered to be important?
 # e.g., 1, .5, .5 vs. a model fit on a given set of data (as below)
 
-tbl_inb_weighted <- tbl_inb_weighted %>% mutate(trial_id = 1:nrow(tbl_inb_weighted))
+
+
 params <- c(c = 1, w = .5, bias = .5)
-params <- pmap(list(params, c(0, .01, .0001), c(10, .99, .9999)), upper_and_lower_bounds)
+
+lo <- c(0, .01, .0001)
+hi <- c(10, .99, .9999)
+params <- pmap(list(params, lo, hi), upper_and_lower_bounds)
 params_init <- params
 
 t_start <- Sys.time()
@@ -337,20 +286,22 @@ results_pre <- optim(
   params_init,
   gcm_likelihood_no_forgetting,
   tbl_transfer = tbl_transfer,
-  tbl_x = tbl_inb_weighted,#, tbl_inb_weighted,
+  tbl_x = tbl_inb_weighted, 
   n_feat = 2,
-  d_measure = 1
+  d_measure = 1,
+  lo = lo,
+  hi = hi
 )
 t_end <- Sys.time()
 round(t_end - t_start, 1)
 
 params_fin <- list()
-params_fin[["not_tf"]] <- pmap_dbl(list(results_pre$par, c(0, .01, .0001), c(10, .99, .9999)), upper_and_lower_bounds_revert)
+params_fin[["not_tf"]] <- pmap_dbl(list(results_pre$par, lo, hi), upper_and_lower_bounds_revert)
 params_fin[["tf"]] <- results_pre$par
 params_ignorant <- list()
-params_ignorant[["tf"]] <- pmap_dbl(list(c(c = 1, w = .5, bias = .5), c(0, .01, .0001), c(10, .99, .9999)), upper_and_lower_bounds)
+params_ignorant[["tf"]] <- pmap_dbl(list(c(c = 1, w = .5, bias = .5), lo, hi), upper_and_lower_bounds)
 params_ignorant[["not_tf"]] <- c(c = 1, w = .5, bias = .5)
-
+params_fin
 
 
 # training data
@@ -363,28 +314,29 @@ tbl_transfer
 tbl_importance <- tbl_inb_upsample
 l_new_samples <- split(tbl_inb_upsample %>% dplyr::select(-trial_id), tbl_inb_upsample$trial_id)
 
-tbl_important_up_2 <- importance_upsampling(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 2)
-tbl_important_up_2$is_new <- 1
-tbl_important_up_2$is_new[(nrow(tbl_inb) + 1) : nrow(tbl_important_up_2)] <- 5
+cols_req <- c("x1", "x2", "category", "response")
+tbl_important_up_few <- importance_upsampling(l_new_samples, tbl_importance, tbl_inb[, cols_req], params_fin$tf, tbl_transfer, n_feat = 2, d_measure = 1, lo = lo, hi = hi, n_max = 3)
+tbl_important_up_few$is_new <- 1
+tbl_important_up_few$is_new[(nrow(tbl_inb) + 1) : nrow(tbl_important_up_few)] <- 5
 
-tbl_important_up_10 <- importance_upsampling(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 10)
-tbl_important_up_10$is_new <- 1
-tbl_important_up_10$is_new[(nrow(tbl_inb) + 1) : nrow(tbl_important_up_10)] <- 5
+tbl_important_up_more <- importance_upsampling(l_new_samples, tbl_importance, tbl_inb[, cols_req], params_fin$tf, tbl_transfer, n_feat = 2, d_measure = 1, lo = lo, hi = hi, n_max = 5)
+tbl_important_up_more$is_new <- 1
+tbl_important_up_more$is_new[(nrow(tbl_inb) + 1) : nrow(tbl_important_up_more)] <- 5
 
 
 pl_points_obs <- plot_grid(tbl_inb %>% mutate(category = factor(category))) + 
   geom_abline() + ggtitle("Observed")
 pl_points_transfer <- plot_grid(tbl_transfer) + geom_abline() + ggtitle("Transfer")
-pl_points_importance_2 <- plot_grid(tbl_important_up_2) + geom_abline() +
+pl_points_importance_few <- plot_grid(tbl_important_up_few) + geom_abline() +
   geom_point(aes(size = is_new), shape = 1) +
   scale_size_continuous(guide = "none") +
-  ggtitle("Add Two Samples")
-pl_points_importance_10 <- plot_grid(tbl_important_up_10) + geom_abline() +
+  ggtitle("Add Three Samples")
+pl_points_importance_more <- plot_grid(tbl_important_up_more) + geom_abline() +
   geom_point(aes(size = is_new), shape = 1) +
   scale_size_continuous(guide = "none") +
-  ggtitle("Add Ten Samples")
+  ggtitle("Add Five Samples")
 
-grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance_2, pl_points_importance_10, nrow = 2))
+grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance_few, pl_points_importance_more, nrow = 2))
 
 
 
@@ -426,7 +378,7 @@ pl_drop_bal <- ggplot(tbl_drop_bal, aes(round(x1, 0), round(x2, 0))) +
 grid.draw(arrangeGrob(pl_drop_imb, pl_drop_bal, nrow = 1))
 
 
-tbl_important_down <- importance_downsampling(tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, n_max = 45)
+tbl_important_down <- importance_downsampling(tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, lo = lo, hi = hi, n_max = 45)
 tbl_removed <- left_join(tbl_inb_plus, tbl_important_down, by = c("x1", "x2", "category"))
 tbl_removed$is_removed <- 1
 tbl_removed$is_removed[is.na(tbl_removed$importance)] <- 5
