@@ -1,4 +1,5 @@
 rm(list = ls())
+set.seed(4399)
 
 library(tidyverse)
 library(grid)
@@ -57,7 +58,7 @@ tbl_x_ii_inb <- tbl_x_ii %>%
   )
 tbl_x_ii_inb <- tbl_x_ii_inb[
   sample(1:nrow(tbl_x_ii_inb), nrow(tbl_x_ii_inb), replace = FALSE), 
-  ]
+]
 tbl_x_ii_inb$trial_id <- seq(1, nrow(tbl_x_ii_inb), by = 1)
 # tbl_x_sq_inb$n[tbl_x_sq_inb$category %in% c(1, 2)] <- 3
 
@@ -95,13 +96,14 @@ pl_inb <- plot_grid(tbl_inb_weighted %>% mutate(category = factor(category))) + 
 # the base models use all presented data points to predict on the transfer set
 
 # create 10 x 10 grid of data points as a transfer set
-x1 <- seq(.5, 5.5, by = 1)
-x2 <- seq(1, 6, by = 1)
+x1 <- seq(.5, 6.5, by = 1)
+x2 <- seq(.5, 6.5, by = 1)
 tbl_transfer <- crossing(x1 = x1, x2 = x2) %>% 
+  filter(x1 != x2) %>%
   mutate(
     category = fct_rev(factor(x1 > x2, labels = c(1, 0))),
     trial_id = sample(1:nrow(.), nrow(.), replace = FALSE)
-    ) %>% arrange(trial_id)
+  ) %>% arrange(trial_id)
 l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
 plot_grid(tbl_transfer) + geom_abline()
 
@@ -114,12 +116,18 @@ tbl_inb[, c("x1", "x2", "category")] <- add_jitter(tbl_inb)
 tbl_inb_weighted[, c("x1", "x2", "category")] <- add_jitter(tbl_inb_weighted)
 tbl_transfer[, c("x1", "x2", "category")] <- add_jitter(tbl_transfer)
 
-set.seed(4390)
+
 tbl_inb <- simulate_responses(tbl_inb)
 tbl_inb_weighted <- simulate_responses(tbl_inb_weighted)
 tbl_transfer <- simulate_responses(tbl_transfer)
 
-
+# tbl_inb_old <- tbl_inb
+# tbl_inb_weighted_old <- tbl_inb_weighted
+# tbl_transfer_old <- tbl_transfer
+# 
+# tbl_transfer$response == tbl_transfer_old$response
+# tbl_inb$response == tbl_inb_old$response
+# tbl_inb_weighted$response == tbl_inb_weighted_old$response
 
 # base model with bias term = .5
 l_category_probs.5 <- map(l_transfer_x, gcm_base, tbl_x = tbl_inb, n_feat = 2, c = 1, w = .5, bias = .5, delta = 0, d_measure = 1)
@@ -249,7 +257,7 @@ tbl_inb_upsample <- l_tbl_upsample_inb %>% reduce(rbind) %>%
     x1 = x1 + rnorm(nrow(.), 0, .01),
     x2 = x2 + rnorm(nrow(.), 0, .01),
     response = category
-    )
+  )
 plot_grid(tbl_inb_upsample %>% mutate(category = factor(category))) + geom_abline()
 
 
@@ -272,7 +280,7 @@ grid.draw(arrangeGrob(pl_train, pl_transfer, nrow = 1))
 # which data points are considered to be important?
 # e.g., 1, .5, .5 vs. a model fit on a given set of data (as below)
 
-
+#gcm_likelihood_no_forgetting(params_init, tbl_transfer, tbl_inb, 2, 1, lo, hi)
 
 params <- c(c = 1, w = .5, bias = .5)
 
@@ -285,7 +293,7 @@ t_start <- Sys.time()
 results_pre <- optim(
   params_init,
   gcm_likelihood_no_forgetting,
-  tbl_transfer = tbl_transfer,
+  tbl_transfer = tbl_inb_weighted,
   tbl_x = tbl_inb_weighted, 
   n_feat = 2,
   d_measure = 1,
@@ -301,9 +309,17 @@ params_fin[["tf"]] <- results_pre$par
 params_ignorant <- list()
 params_ignorant[["tf"]] <- pmap_dbl(list(c(c = 1, w = .5, bias = .5), lo, hi), upper_and_lower_bounds)
 params_ignorant[["not_tf"]] <- c(c = 1, w = .5, bias = .5)
-params_fin
+params_fin[["not_tf"]]
+params_ignorant[["not_tf"]]
 
 
+
+tbl_inb_weighted %>%
+  mutate(x1 = round(x1, 0), x2 = round(x2, 0)) %>%
+  group_by(x1, x2) %>%
+  summarize(accuracy = mean(accuracy)) %>%
+  ggplot(aes(x1, x2)) +
+  geom_tile(aes(fill = accuracy))
 # training data
 # 15 vs. 3 examples, but number of presentations per category is fixed
 # 
@@ -311,8 +327,56 @@ tbl_inb
 tbl_transfer
 
 
-tbl_importance <- tbl_inb_upsample
-l_new_samples <- split(tbl_inb_upsample %>% dplyr::select(-trial_id), tbl_inb_upsample$trial_id)
+# two options
+# 1. present a balanced data set for training (with fewer examples in one category)
+# 2. present an imbalanced data set for training (with fewer presentations and examples in one category)
+
+# for option 1., the upsampled points can be matched in the "number of presentations" as compared to the minority examples
+# or the upsampled points are just added as one presentation, which reduces their influence compared to 1.
+# for option 2., this is not a problem. but only presenting a few stimuli in one category may be odd to start with
+
+tbl_importance <- tbl_inb_upsample %>% filter(category == 1)
+l_new_samples <- split(tbl_importance %>% dplyr::select(-trial_id), tbl_importance$trial_id)
+
+tbl_important_up <- importance_upsampling(
+  l_new_samples, tbl_importance, tbl_inb[, cols_req], params_fin$tf, 
+  tbl_transfer %>% mutate(response = category), n_feat = 2, d_measure = 1, lo = lo, hi = hi, n_max = 3
+)
+plot_grid(tbl_important_up)
+
+tbl_important_down <- importance_downsampling(
+  tbl_important_up[, cols_req], params_fin$tf, tbl_transfer, n_feat = 2, d_measure = 1, 
+  lo = lo, hi = hi, cat_down = 0, n_max = 6
+)
+
+plot_grid(tbl_important_down)
+
+
+
+t_start <- Sys.time()
+results_up <- optim(
+  params_init,
+  gcm_likelihood_no_forgetting,
+  tbl_transfer = tbl_important_up %>% mutate(trial_id = 1:nrow(.)),
+  tbl_x = tbl_important_up %>% mutate(trial_id = 1:nrow(.)), 
+  n_feat = 2,
+  d_measure = 1,
+  lo = lo,
+  hi = hi
+)
+t_end <- Sys.time()
+round(t_end - t_start, 1)
+
+params_up <- list()
+params_up[["not_tf"]] <- pmap_dbl(list(results_up$par, lo, hi), upper_and_lower_bounds_revert)
+params_up[["tf"]] <- results_up$par
+
+
+
+
+
+
+
 
 cols_req <- c("x1", "x2", "category", "response")
 tbl_important_up_few <- importance_upsampling(l_new_samples, tbl_importance, tbl_inb[, cols_req], params_fin$tf, tbl_transfer, n_feat = 2, d_measure = 1, lo = lo, hi = hi, n_max = 3)
@@ -340,40 +404,43 @@ grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance_fe
 
 
 
-tbl_drop_imb <- tbl_inb_plus
+tbl_drop_bal <- crossing(x1 = 1:6, x2 = 1:6) %>% mutate(category = as.factor(as.numeric(x1 > x2))) %>% filter(x1 != x2)
+v_importance <- future_map_dbl(
+  1:nrow(tbl_drop_bal), remove_sample, tbl_base = tbl_drop_bal, params = params, 
+  tbl_transfer = tbl_drop_bal %>% mutate(response = category), n_feat = 2, d_measure = 1,
+  f_likelihood = gcm_likelihood_no_forgetting,
+  lo = lo, hi = hi
+)
+tbl_drop_bal$importance <- v_importance
+# pick best imagined data point
+pl_drop_bal <- ggplot(tbl_drop_bal, aes(round(x1, 0), round(x2, 0))) +
+  geom_tile(aes(fill = importance)) +
+  scale_fill_gradient2(low = "palegreen3", high = "black", midpoint = 23) +
+  labs(x = expression(x[1]), y = expression(x[2])) + theme_bw() +
+  geom_point()
+
+
+
+
+
+tbl_drop_imb <- tbl_inb
 v_importance <- future_map_dbl(
   1:nrow(tbl_drop_imb), remove_sample, tbl_base = tbl_drop_imb, params = params, 
-  tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1,
-  f_likelihood = gcm_likelihood_no_forgetting
+  tbl_transfer = tbl_drop_bal %>% mutate(response = category), n_feat = 2, d_measure = 1,
+  f_likelihood = gcm_likelihood_no_forgetting,
+  lo = lo, hi = hi
 )
 tbl_drop_imb$importance <- v_importance
 # pick best imagined data point
-
-
-
 
 # importance of a data point depends on the distribution of data across categories
 # check: why is overall -2*ll worse with more training data points? this is odd
 tbl_drop_imb <- tbl_drop_imb %>% mutate(rank_importance = rank(importance, ties.method = "min"))
 pl_drop_imb <- ggplot(tbl_drop_imb, aes(round(x1, 0), round(x2, 0))) +
   geom_tile(aes(fill = importance)) +
-  scale_fill_gradient2(low = "palegreen3", high = "black", midpoint = 138) +
+  scale_fill_gradient2(low = "palegreen3", high = "black", midpoint = 85) +
   labs(x = expression(x[1]), y = expression(x[2])) + theme_bw() +
   geom_point(color = "white")
-
-tbl_drop_bal <- crossing(x1 = 1:10, x2 = 1:10) %>% mutate(category = as.factor(as.numeric(x1 > x2)))
-v_importance <- future_map_dbl(
-  1:nrow(tbl_drop_bal), remove_sample, tbl_base = tbl_drop_bal, params = params, 
-  tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1,
-  f_likelihood = gcm_likelihood_no_forgetting
-)
-tbl_drop_bal$importance <- v_importance
-# pick best imagined data point
-pl_drop_bal <- ggplot(tbl_drop_bal, aes(round(x1, 0), round(x2, 0))) +
-  geom_tile(aes(fill = importance)) +
-  scale_fill_gradient2(low = "palegreen3", high = "dodgerblue2", midpoint = 353) +
-  labs(x = expression(x[1]), y = expression(x[2])) + theme_bw() +
-  geom_point()
 
 grid.draw(arrangeGrob(pl_drop_imb, pl_drop_bal, nrow = 1))
 
