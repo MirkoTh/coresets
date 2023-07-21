@@ -194,6 +194,7 @@ importance_upsampling <- function(l_new_samples, tbl_importance, tbl_inb_plus, p
   future::plan(multisession, workers = future::availableCores() - 2)
   l_samples <- l_new_samples
   # sequential importance sampling
+  # optimizes labels on training data
   for (i in 1:n_max) {
     v_importance <- future_map_dbl(
       l_samples, add_sample, tbl_base = tbl_inb_plus, params = params, 
@@ -215,23 +216,27 @@ importance_upsampling <- function(l_new_samples, tbl_importance, tbl_inb_plus, p
 }
 
 
-importance_downsampling <- function(tbl_inb_plus, params, tbl_transfer, n_feat, d_measure, lo, hi, n_max = 10) {
+importance_downsampling <- function(tbl_inb, params, tbl_transfer, n_feat, d_measure, lo, hi, cat_down, n_max = 10) {
   #' @description remove n_max least important upsampled data points from the training set
 
   future::plan(multisession, workers = future::availableCores() - 2)
   # sequential importance sampling
-  tbl_drop <- tbl_inb_plus
-  while (nrow(tbl_drop) > n_max) {
+  tbl_drop <- tbl_inb
+  
+  
+  while (nrow(tbl_drop %>% filter(category == cat_down)) > n_max) {
+    rows_to_drop <- which(tbl_drop$category == cat_down)
     v_importance <- future_map_dbl(
-      1:nrow(tbl_drop), remove_sample, tbl_base = tbl_drop, params = params, 
+      rows_to_drop, remove_sample, tbl_base = tbl_drop, params = params, 
       tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1,
       f_likelihood = gcm_likelihood_no_forgetting, lo = lo, hi = hi
       )
-    tbl_drop$importance <- v_importance
+    tbl_drop$importance <- max(v_importance + 1)
+    tbl_drop$importance[rows_to_drop] <- v_importance
     # pick best imagined data point
     tbl_drop <- tbl_drop %>% mutate(rank_importance = rank(importance, ties.method = "min"))
     # exclude sampled points from sampling set
-    idx_chosen_point <- which.min(v_importance)
+    idx_chosen_point <- which.min(tbl_drop$importance)
     tbl_drop <- tbl_drop[-idx_chosen_point,]
   }
   
@@ -274,6 +279,7 @@ simulate_responses <- function(tbl_df) {
   #' information integration structure
   #' @param tbl_df the tbl with x1 and x2 coordinates
   #' @return the same tbl with p_correct, accuracy, and responses added as columns
+
 
   tbl_df$x1_bd <- (tbl_df$x1 + tbl_df$x2) / 2
   tbl_df$x2_bd <- tbl_df$x1_bd
