@@ -1,5 +1,5 @@
 rm(list = ls())
-set.seed(4399)
+set.seed(43995)
 
 library(tidyverse)
 library(grid)
@@ -289,6 +289,8 @@ hi <- c(10, .99, .9999)
 params <- pmap(list(params, lo, hi), upper_and_lower_bounds)
 params_init <- params
 
+
+
 t_start <- Sys.time()
 results_pre <- optim(
   params_init,
@@ -338,9 +340,14 @@ tbl_transfer
 tbl_importance <- tbl_inb_upsample %>% filter(category == 1)
 l_new_samples <- split(tbl_importance %>% dplyr::select(-trial_id), tbl_importance$trial_id)
 
+cols_req <- c("x1", "x2", "category", "response")
 tbl_important_up <- importance_upsampling(
-  l_new_samples, tbl_importance, tbl_inb[, cols_req], params_fin$tf, 
-  tbl_transfer %>% mutate(response = category), n_feat = 2, d_measure = 1, lo = lo, hi = hi, n_max = 3
+  l_new_samples, tbl_importance, tbl_inb[, cols_req], params_ignorant$tf, 
+  tbl_x_ii %>% mutate(response = category),
+  # tbl_transfer %>% 
+  #   mutate(response = category) %>% 
+  #   filter(x1 < 6 & x1 > 1 & x2 > 1 & x2 < 6), 
+  n_feat = 2, d_measure = 1, lo = lo, hi = hi, n_max = 3
 )
 plot_grid(tbl_important_up)
 
@@ -378,7 +385,6 @@ params_up[["tf"]] <- results_up$par
 
 
 
-cols_req <- c("x1", "x2", "category", "response")
 tbl_important_up_few <- importance_upsampling(l_new_samples, tbl_importance, tbl_inb[, cols_req], params_fin$tf, tbl_transfer, n_feat = 2, d_measure = 1, lo = lo, hi = hi, n_max = 3)
 tbl_important_up_few$is_new <- 1
 tbl_important_up_few$is_new[(nrow(tbl_inb) + 1) : nrow(tbl_important_up_few)] <- 5
