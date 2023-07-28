@@ -337,7 +337,7 @@ mark_changes <- function(tbl_final, tbl_original) {
     dplyr::select(-cat_structure)
   # mark downsampled points
   tbl_dropped <- tbl_original %>% 
-    left_join(tbl_final[, c("x1", "x2", "is_new")], by = c("x1", "x2")) %>%
+    left_join(tbl_new[, c("x1", "x2", "is_new")], by = c("x1", "x2")) %>%
     mutate(is_dropped = is.na(is_new)) %>%
     dplyr::select(-is_new)
   # integrate new and dropped points
