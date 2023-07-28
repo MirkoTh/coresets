@@ -372,48 +372,6 @@ pl_points_importance <- plot_new_and_dropped(tbl_all)
 grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance, nrow = 1))
 
 
-
-tbl_drop_bal <- crossing(x1 = 1:6, x2 = 1:6) %>% mutate(category = as.factor(as.numeric(x1 > x2))) %>% filter(x1 != x2)
-v_importance <- future_map_dbl(
-  1:nrow(tbl_drop_bal), remove_sample, tbl_base = tbl_drop_bal, params = params, 
-  tbl_transfer = tbl_drop_bal %>% mutate(response = category), n_feat = 2, d_measure = 1,
-  f_likelihood = gcm_likelihood_no_forgetting,
-  lo = lo, hi = hi
-)
-tbl_drop_bal$importance <- v_importance
-# pick best imagined data point
-pl_drop_bal <- ggplot(tbl_drop_bal, aes(round(x1, 0), round(x2, 0))) +
-  geom_tile(aes(fill = importance)) +
-  scale_fill_gradient2(low = "palegreen3", high = "black", midpoint = 23) +
-  labs(x = expression(x[1]), y = expression(x[2])) + theme_bw() +
-  geom_point()
-
-
-
-
-
-tbl_drop_imb <- tbl_inb
-v_importance <- future_map_dbl(
-  1:nrow(tbl_drop_imb), remove_sample, tbl_base = tbl_drop_imb, params = params, 
-  tbl_transfer = tbl_drop_bal %>% mutate(response = category), n_feat = 2, d_measure = 1,
-  f_likelihood = gcm_likelihood_no_forgetting,
-  lo = lo, hi = hi
-)
-tbl_drop_imb$importance <- v_importance
-# pick best imagined data point
-
-# importance of a data point depends on the distribution of data across categories
-# check: why is overall -2*ll worse with more training data points? this is odd
-tbl_drop_imb <- tbl_drop_imb %>% mutate(rank_importance = rank(importance, ties.method = "min"))
-pl_drop_imb <- ggplot(tbl_drop_imb, aes(round(x1, 0), round(x2, 0))) +
-  geom_tile(aes(fill = importance)) +
-  scale_fill_gradient2(low = "palegreen3", high = "black", midpoint = 85) +
-  labs(x = expression(x[1]), y = expression(x[2])) + theme_bw() +
-  geom_point(color = "white")
-
-grid.draw(arrangeGrob(pl_drop_imb, pl_drop_bal, nrow = 1))
-
-
 tbl_important_down <- importance_downsampling(tbl_inb_plus, params, tbl_transfer, n_feat = 2, d_measure = 1, lo = lo, hi = hi, n_max = 45)
 tbl_removed <- left_join(tbl_inb_plus, tbl_important_down, by = c("x1", "x2", "category"))
 tbl_removed$is_removed <- 1
