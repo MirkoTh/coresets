@@ -389,67 +389,90 @@ grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance, n
 
 # Predict Data with Strategic Sampling Model
 
-n_reps <- 15
-
-tbl_cat_probs <- category_probs(params, tbl_transfer, tbl_important_down, 2, 1, lo, hi)
-tbl_generate <- tibble(
-  repeat_tibble(tbl_transfer, n_reps), 
-  prob_correct = rep(tbl_cat_probs$prob_correct, n_reps)
-  )
-tbl_generate$accuracy <- rbernoulli(nrow(tbl_generate), tbl_generate$prob_correct)
-tbl_generate$response <- pmap_dbl(
-  tbl_generate[, c("category", "accuracy")], 
-  ~ c((as.numeric(as.character(..1)) - 1) * -1, as.numeric(as.character(..1)))[(..2 + 1)]
-  )
-
-params_init <- params
 
 # Test Model Recovery
 # Model Candidates:
 # - strategic sampling (true)
 # - using all presented data points
-# - decay gcm
+# - decay gcm (not yet implemented)
+# diffs in lls
+# 10 reps: 6
+# 15 reps: 
+# 20 reps: 20
 
 
-t_start <- Sys.time()
-results_strat <- optim(
-  params_init,
-  gcm_likelihood_no_forgetting,
-  tbl_transfer = tbl_generate,
-  tbl_x = tbl_important_down, 
-  n_feat = 2,
-  d_measure = 1,
-  lo = lo,
+plot_grid(tbl_imb_weighted)
+plot_grid(tbl_important_down)
+
+c <- seq(.5, 2, length.out = 2)
+w <- seq(.2, .8, length.out = 2)
+bias <- seq(.2, .8, length.out = 2)
+n_reps <- c(1)
+tbl_params <- crossing(c, w, bias, n_reps)
+
+list_params <- pmap(tbl_params[, c("c", "w", "bias")], ~ list(
+  not_tf = c(c = ..1, w = ..2, bias = ..3),
+  tf = upper_and_lower_bounds(c(c = ..1, w = ..2, bias = ..3), lo, hi)
+))
+l_n_reps <- map(tbl_params$n_reps, 1)
+
+future::plan(multisession, workers = future::availableCores() - 2)
+l_results <- future_map2(
+  .x = l_n_reps, .y = list_params, 
+  .f = generate_and_fit, 
+  tbl_train_orig = tbl_imb_weighted, 
+  tbl_train_strat = tbl_important_down, 
+  tbl_transfer = tbl_transfer, 
+  n_feat = n_feat, 
+  d_measure = d_measure, 
+  lo = lo, 
   hi = hi
 )
-t_end <- Sys.time()
-round(t_end - t_start, 1)
 
-params_strat <- list()
-params_strat[["not_tf"]] <- pmap_dbl(list(results_strat$par, lo, hi), upper_and_lower_bounds_revert)
-params_strat[["tf"]] <- results_strat$par
+l_results_ll <- map(l_results, "n2lls")
 
-
-t_start <- Sys.time()
-results_orig <- optim(
-  params_init,
-  gcm_likelihood_no_forgetting,
-  tbl_transfer = tbl_generate,
-  tbl_x = tbl_imb_weighted, 
-  n_feat = 2,
-  d_measure = 1,
-  lo = lo,
-  hi = hi
+ll_strat <- map_dbl(l_results_ll, "strategic")
+ll_orig <- map_dbl(l_results_ll, "original")
+tbl_lls <- cbind(
+  tbl_params, 
+  tibble(
+    strat = ll_strat,
+    orig = ll_orig
+  )
+) %>% mutate(
+  delta = strat - orig
 )
-t_end <- Sys.time()
-round(t_end - t_start, 1)
 
-params_orig <- list()
-params_orig[["not_tf"]] <- pmap_dbl(list(results_orig$par, lo, hi), upper_and_lower_bounds_revert)
-params_orig[["tf"]] <- results_orig$par
+ggplot(tbl_lls, aes(delta)) + 
+  geom_histogram(color = "white", fill = "skyblue2") +
+  theme_bw() +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(x = "Delta (Strat. Sampl. - Original)", y = "Nr. Simulations") + 
+  theme(strip.background = element_rect(fill = "white")) + 
+  scale_color_manual(values = c("skyblue2", "tomato4"), name = "")
 
 
-results_strat$value
-results_orig$value
+l_results_params <- map(l_results, "params_strat")
+tbl_params_fit <- reduce(map(l_results_params, "not_tf"), rbind)
+colnames(tbl_params_fit) <- c("c_fit", "w_fit", "bias_fit")
 
+tbl_params_all <- cbind(
+  tbl_params,
+  tbl_params_fit
+)
+
+
+tbl_params_all %>%
+  summarize(
+    c_c = cor(c, c_fit),
+    c_w = cor(c, w_fit),
+    c_bias = cor(c, bias_fit),
+    w_c = cor(w, c_fit),
+    w_w = cor(w, w_fit),
+    w_bias = cor(w, bias_fit),
+    bias_c = cor(bias, c_fit),
+    bias_w = cor(bias, w_fit),
+    bias_bias = cor(bias, bias_fit)
+  )
 
