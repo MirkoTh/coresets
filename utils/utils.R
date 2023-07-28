@@ -310,3 +310,28 @@ add_jitter <- function(tbl_df) {
       x2 = x2 + rnorm(nrow(.), 0, .01)
     )
 }
+
+
+mark_changes <- function(tbl_final, tbl_original) {
+  #' @description mark up- and downsampled points
+  #' @param tbl_final the remaining tbl after strategic sampling
+  #' @param tbl_original the tbl with all points presented to participants
+  #' @return a tbl including all up- and downsampled points
+  
+  tbl_new <- tbl_final %>% 
+    left_join(tbl_original[, c("x1", "x2", "cat_structure")], by = c("x1", "x2")) %>%
+    mutate(is_new = is.na(cat_structure)) %>%
+    dplyr::select(-cat_structure)
+  # mark downsampled points
+  tbl_dropped <- tbl_original %>% 
+    left_join(tbl_final[, c("x1", "x2", "is_new")], by = c("x1", "x2")) %>%
+    mutate(is_dropped = is.na(is_new)) %>%
+    dplyr::select(-is_new)
+  # integrate new and dropped points
+  full_join(
+    tbl_new[, c("x1", "x2", "category", "is_new")], 
+    tbl_dropped[, c("x1", "x2", "category", "is_dropped")], 
+    by = c("x1", "x2", "category")
+  ) %>%
+    replace_na(list(is_new = FALSE, is_dropped = FALSE))
+}
