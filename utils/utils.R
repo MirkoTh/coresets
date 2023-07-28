@@ -367,3 +367,21 @@ plot_new_and_dropped <- function(tbl_all) {
   scale_size_continuous(guide = "none") +
   ggtitle("Up- and Downsampling")
 }
+
+
+generate_data <- function(n_reps, params, tbl_transfer, tbl_train, n_feat, d_measure, lo, hi) {
+  #' @description helper function to generate data on transfer data given 
+  #' training data and set of parameters
+  
+  tbl_cat_probs <- category_probs(params_fin$tf, tbl_transfer, tbl_train, 2, 1, lo, hi)
+  tbl_generate <- tibble(
+    repeat_tibble(tbl_transfer, n_reps), 
+    prob_correct = rep(tbl_cat_probs$prob_correct, n_reps)
+  )
+  tbl_generate$accuracy <- rbernoulli(nrow(tbl_generate), tbl_generate$prob_correct)
+  tbl_generate$response <- pmap_dbl(
+    tbl_generate[, c("category", "accuracy")], 
+    ~ c((as.numeric(as.character(..1)) - 1) * -1, as.numeric(as.character(..1)))[(..2 + 1)]
+  )
+  return(tbl_generate)
+}
