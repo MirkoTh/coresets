@@ -188,9 +188,12 @@ remove_sample <- function(rwn_remove, tbl_base, params, tbl_transfer, n_feat, d_
 }
 
 
-importance_upsampling <- function(l_new_samples, tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat, d_measure, lo, hi, n_max = 10) {
+importance_upsampling <- function(tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat, d_measure, lo, hi, n_max = 10) {
   #' @description add n_max most important upsampled data points to the training set
 
+  
+  l_new_samples <- split(tbl_importance %>% dplyr::select(-trial_id), tbl_importance$trial_id)
+  
   future::plan(multisession, workers = future::availableCores() - 2)
   l_samples <- l_new_samples
   # sequential importance sampling
@@ -284,7 +287,7 @@ simulate_responses <- function(tbl_df) {
   tbl_df$x1_bd <- (tbl_df$x1 + tbl_df$x2) / 2
   tbl_df$x2_bd <- tbl_df$x1_bd
   tbl_df$d_bd <- sqrt((tbl_df$x1 - tbl_df$x1_bd) ^ 2 + (tbl_df$x2 - tbl_df$x2_bd) ^2)
-  tbl_df$p_correct <- 1 - exp(-tbl_df$d_bd)
+  tbl_df$p_correct <- 1 - exp(-tbl_df$d_bd * 1.5)
   tbl_df$accuracy <- rbernoulli(nrow(tbl_df), p = tbl_df$p_correct)
   tbl_df$response <- pmap_dbl(
     tbl_df[, c("category", "accuracy")], 
