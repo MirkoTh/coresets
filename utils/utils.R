@@ -188,7 +188,7 @@ remove_sample <- function(rwn_remove, tbl_base, params, tbl_transfer, n_feat, d_
 }
 
 
-importance_upsampling <- function(tbl_importance, tbl_inb_plus, params, tbl_transfer, n_feat, d_measure, lo, hi, n_max = 10) {
+importance_upsampling <- function(tbl_importance, tbl_imb_plus, params, tbl_transfer, n_feat, d_measure, lo, hi, n_max = 10) {
   #' @description add n_max most important upsampled data points to the training set
 
   
@@ -200,14 +200,14 @@ importance_upsampling <- function(tbl_importance, tbl_inb_plus, params, tbl_tran
   # optimizes labels on training data
   for (i in 1:n_max) {
     v_importance <- future_map_dbl(
-      l_samples, add_sample, tbl_base = tbl_inb_plus, params = params, 
+      l_samples, add_sample, tbl_base = tbl_imb_plus, params = params, 
       tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1,
       f_likelihood = gcm_likelihood_no_forgetting, lo = lo, hi = hi
       )
     tbl_importance$importance <- v_importance
     # pick best imagined data point
     tbl_importance <- tbl_importance %>% mutate(rank_importance = rank(importance, ties.method = "min"))
-    tbl_inb_plus <- rbind(tbl_inb_plus, tbl_importance %>% dplyr::filter(rank_importance == 1) %>% dplyr::select(x1, x2, category, response))
+    tbl_imb_plus <- rbind(tbl_imb_plus, tbl_importance %>% dplyr::filter(rank_importance == 1) %>% dplyr::select(x1, x2, category, response))
     # exclude sampled points from sampling set
     idx_chosen_point <- which.min(v_importance)
     tbl_importance <- tbl_importance[-idx_chosen_point,]
@@ -215,16 +215,16 @@ importance_upsampling <- function(tbl_importance, tbl_inb_plus, params, tbl_tran
   }
   
   future::plan("default")
-  return(tbl_inb_plus)
+  return(tbl_imb_plus)
 }
 
 
-importance_downsampling <- function(tbl_inb, params, tbl_transfer, n_feat, d_measure, lo, hi, cat_down, n_max = 10) {
+importance_downsampling <- function(tbl_imb, params, tbl_transfer, n_feat, d_measure, lo, hi, cat_down, n_max = 10) {
   #' @description remove n_max least important upsampled data points from the training set
 
   future::plan(multisession, workers = future::availableCores() - 2)
   # sequential importance sampling
-  tbl_drop <- tbl_inb
+  tbl_drop <- tbl_imb
   
   
   while (nrow(tbl_drop %>% filter(category == cat_down)) > n_max) {
@@ -334,4 +334,23 @@ mark_changes <- function(tbl_final, tbl_original) {
     by = c("x1", "x2", "category")
   ) %>%
     replace_na(list(is_new = FALSE, is_dropped = FALSE))
+}
+
+
+plot_new_and_dropped <- function(tbl_all) {
+  ggplot(tbl_all, aes(x1, x2, group = category)) + 
+  geom_point(aes(color = category, alpha = is_dropped)) + 
+  geom_point(aes(size = as.numeric(is_new), alpha = is_dropped), shape = 1) +
+  geom_point(aes(size = as.numeric(is_dropped)), shape = 1) +
+  theme_bw() +
+  scale_alpha_manual(values = c(1, 0), guide = "none") +
+  scale_size_manual(guide = "none") +
+  scale_x_continuous(expand = c(.1, .1), breaks = seq(2, 10, by = 2)) +
+  scale_y_continuous(expand = c(.1, .1), breaks = seq(2, 10, by = 2)) +
+  labs(x = expression(x[1]), y = expression(x[2])) +
+  theme(strip.background = element_rect(fill = "white")) +
+  scale_color_viridis_d(name = "Category") + 
+  geom_abline() +
+  scale_size_continuous(guide = "none") +
+  ggtitle("Up- and Downsampling")
 }
