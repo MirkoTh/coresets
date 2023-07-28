@@ -373,7 +373,7 @@ generate_data <- function(n_reps, params, tbl_transfer, tbl_train, n_feat, d_mea
   #' @description helper function to generate data on transfer data given 
   #' training data and set of parameters
   
-  tbl_cat_probs <- category_probs(params_fin$tf, tbl_transfer, tbl_train, 2, 1, lo, hi)
+  tbl_cat_probs <- category_probs(params$tf, tbl_transfer, tbl_train, 2, 1, lo, hi)
   tbl_generate <- tibble(
     repeat_tibble(tbl_transfer, n_reps), 
     prob_correct = rep(tbl_cat_probs$prob_correct, n_reps)
@@ -385,3 +385,52 @@ generate_data <- function(n_reps, params, tbl_transfer, tbl_train, n_feat, d_mea
   )
   return(tbl_generate)
 }
+
+
+generate_and_fit <- function(n_reps, params, tbl_train_orig, tbl_train_strat, tbl_transfer, n_feat, d_measure, lo, hi) {
+  #' @description generate data given model and strategically sampled data
+  #' and fit them given strategically sampled data or originally presented data
+  
+  tbl_generate <- generate_data(n_reps, params, tbl_transfer, tbl_train_strat, n_feat, d_measure, lo, hi)
+  
+  params_init <- c(c = 1, w = .5, bias = .5)
+  params_init_tf <- pmap(list(params_init, lo, hi), upper_and_lower_bounds)
+  
+  results_strat <- optim(
+    params_init_tf,
+    gcm_likelihood_no_forgetting,
+    tbl_transfer = tbl_generate,
+    tbl_x = tbl_train_strat, 
+    n_feat = n_feat,
+    d_measure = d_measure,
+    lo = lo,
+    hi = hi
+  )
+  
+  params_strat <- list()
+  params_strat[["not_tf"]] <- pmap_dbl(list(results_strat$par, lo, hi), upper_and_lower_bounds_revert)
+  params_strat[["tf"]] <- results_strat$par
+  
+  
+  results_orig <- optim(
+    params_init_tf,
+    gcm_likelihood_no_forgetting,
+    tbl_transfer = tbl_generate,
+    tbl_x = tbl_train_orig, 
+    n_feat = n_feat,
+    d_measure = d_measure,
+    lo = lo,
+    hi = hi
+  )
+  
+  params_orig <- list()
+  params_orig[["not_tf"]] <- pmap_dbl(list(results_orig$par, lo, hi), upper_and_lower_bounds_revert)
+  params_orig[["tf"]] <- results_orig$par
+  
+  n2lls <- list()
+  n2lls[["strategic"]] <- results_strat$value
+  n2lls[["original"]] <- results_orig$value
+  
+  return(list(params_strat = params_strat, n2lls = n2lls))
+}
+
