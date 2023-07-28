@@ -366,6 +366,9 @@ tbl_important_down <- importance_downsampling(
   tbl_transfer %>% mutate(response = category), n_feat = 2, d_measure = 1, 
   lo = lo, hi = hi, cat_down = 0, n_max = n_unique_per_category
 )
+tbl_important_down <- tbl_important_down %>%
+  mutate(trial_id = sample(1:nrow(.), nrow(.), replace = FALSE)) %>%
+  arrange(trial_id)
 
 plot_grid(tbl_important_down)
 
@@ -384,17 +387,69 @@ grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance, n
 
 # Model Recovery ----------------------------------------------------------
 
-# Predict Data with different Models
+# Predict Data with Strategic Sampling Model
 
-params_fin
+n_reps <- 15
+
+tbl_cat_probs <- category_probs(params, tbl_transfer, tbl_important_down, 2, 1, lo, hi)
+tbl_generate <- tibble(
+  repeat_tibble(tbl_transfer, n_reps), 
+  prob_correct = rep(tbl_cat_probs$prob_correct, n_reps)
+  )
+tbl_generate$accuracy <- rbernoulli(nrow(tbl_generate), tbl_generate$prob_correct)
+tbl_generate$response <- pmap_dbl(
+  tbl_generate[, c("category", "accuracy")], 
+  ~ c((as.numeric(as.character(..1)) - 1) * -1, as.numeric(as.character(..1)))[(..2 + 1)]
+  )
+
+params_init <- params
+
+# Test Model Recovery
+# Model Candidates:
+# - strategic sampling (true)
+# - using all presented data points
+# - decay gcm
 
 
+t_start <- Sys.time()
+results_strat <- optim(
+  params_init,
+  gcm_likelihood_no_forgetting,
+  tbl_transfer = tbl_generate,
+  tbl_x = tbl_important_down, 
+  n_feat = 2,
+  d_measure = 1,
+  lo = lo,
+  hi = hi
+)
+t_end <- Sys.time()
+round(t_end - t_start, 1)
+
+params_strat <- list()
+params_strat[["not_tf"]] <- pmap_dbl(list(results_strat$par, lo, hi), upper_and_lower_bounds_revert)
+params_strat[["tf"]] <- results_strat$par
 
 
-category_probs(params, tbl_transfer, tbl_important_down, 2, 1, lo, hi)
+t_start <- Sys.time()
+results_orig <- optim(
+  params_init,
+  gcm_likelihood_no_forgetting,
+  tbl_transfer = tbl_generate,
+  tbl_x = tbl_imb_weighted, 
+  n_feat = 2,
+  d_measure = 1,
+  lo = lo,
+  hi = hi
+)
+t_end <- Sys.time()
+round(t_end - t_start, 1)
 
-params
-gcm_likelihood_no_forgetting(params, tbl_transfer, tbl_imb_weighted, 2, 1, lo, hi)
-gcm_likelihood_forgetting(params, tbl_transfer, tbl_imb_weighted, 2, 1, lo, hi)
+params_orig <- list()
+params_orig[["not_tf"]] <- pmap_dbl(list(results_orig$par, lo, hi), upper_and_lower_bounds_revert)
+params_orig[["tf"]] <- results_orig$par
 
-# Recover Models
+
+results_strat$value
+results_orig$value
+
+
