@@ -121,6 +121,29 @@ upsample <- function(category_used, n_upsample, tbl_x) {
 }
 
 
+category_probs <- function(x, tbl_transfer, tbl_x, n_feat, d_measure, lo, hi) {
+  #' @description calculate category probabilities for every stimulus in the transfer set
+  #' @param x parameters
+  #' @param tbl_transfer transfer/test data
+  #' @param tbl_x training data
+  #' @param n_feat number of features
+  #' @param d_measure distance measure, 1 for city-block, 2 for euclidean
+  #' @param lo vector with lower bounds of parameters
+  #' @param hi vector with upper bounds of parameters
+  #' @return negative 2 * summed log likelihood
+  #' 
+  x <- pmap(list(x, lo, hi), upper_and_lower_bounds_revert)
+  l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
+  l_category_probs <- map(l_transfer_x, gcm_base, tbl_x = tbl_x, n_feat = n_feat, c = x[[1]], w = x[[2]], bias = x[[3]], delta = ifelse(is.null(x[["delta"]]), 0, x[["delta"]]), d_measure = d_measure)
+  tbl_probs <- as.data.frame(reduce(l_category_probs, rbind)) %>% mutate(response = tbl_transfer$response)
+  tbl_probs$prob_correct <- pmap_dbl(
+    tbl_probs[, c("0", "1", "response")],
+    ~ c(..1, ..2)[as.numeric(as.character(..3)) + 1]
+  )
+  return(tbl_probs)
+}
+
+
 gcm_likelihood_no_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measure, lo, hi) {
   #' @description -2 * negative log likelihood of transfer set given training data
   #' and a gcm without a forgetting parameter (i.e., forgetting set to 0)
@@ -129,16 +152,11 @@ gcm_likelihood_no_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measu
   #' @param tbl_x training data
   #' @param n_feat number of features
   #' @param d_measure distance measure, 1 for city-block, 2 for euclidean
+  #' @param lo vector with lower bounds of parameters
+  #' @param hi vector with upper bounds of parameters
   #' @return negative 2 * summed log likelihood
   #' 
-  x <- pmap(list(x, lo, hi), upper_and_lower_bounds_revert)
-  l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
-  l_category_probs <- map(l_transfer_x, gcm_base, tbl_x = tbl_x, n_feat = n_feat, c = x[[1]], w = x[[2]], bias = x[[3]], delta = 0, d_measure = d_measure)
-  tbl_probs <- as.data.frame(reduce(l_category_probs, rbind)) %>% mutate(response = tbl_transfer$response)
-  tbl_probs$prob_correct <- pmap_dbl(
-    tbl_probs[, c("0", "1", "response")],
-    ~ c(..1, ..2)[as.numeric(as.character(..3)) + 1]
-  )
+  tbl_probs <- category_probs(x, tbl_transfer, tbl_x, n_feat, d_measure, lo, hi)
   ll <- log(tbl_probs$prob_correct)
   neg2llsum <- -2 * sum(ll)
   return(neg2llsum)
@@ -153,16 +171,11 @@ gcm_likelihood_forgetting <- function(x, tbl_transfer, tbl_x, n_feat, d_measure,
   #' @param tbl_x training data
   #' @param n_feat number of features
   #' @param d_measure distance measure, 1 for city-block, 2 for euclidean
+  #' @param lo vector with lower bounds of parameters
+  #' @param hi vector with upper bounds of parameters
   #' @return negative 2 * summed log likelihood
   #' 
-  x <- pmap(list(x, lo, hi), upper_and_lower_bounds_revert)
-  l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
-  l_category_probs <- map(l_transfer_x, gcm_base, tbl_x = tbl_x, n_feat = n_feat, c = x[[1]], w = x[[2]], bias = x[[3]], delta = x[[4]], d_measure = d_measure)
-  tbl_probs <- as.data.frame(reduce(l_category_probs, rbind)) %>% mutate(response = tbl_transfer$response)
-  tbl_probs$prob_correct <- pmap_dbl(
-    tbl_probs[, c("0", "1", "response")],
-    ~ c(..1, ..2)[as.numeric(as.character(..3)) + 1]
-  )
+  tbl_probs <- category_probs(x, tbl_transfer, tbl_x, n_feat, d_measure, lo, hi)
   ll <- log(tbl_probs$prob_correct)
   neg2llsum <- -2 * sum(ll)
   return(neg2llsum)
