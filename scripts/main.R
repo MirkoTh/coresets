@@ -47,7 +47,7 @@ grid.draw(arrangeGrob(pl_sq, pl_ii, nrow = 1))
 
 
 # create categories with few/many examples
-tbl_x_ii_inb <- tbl_x_ii %>% 
+tbl_x_ii_imb <- tbl_x_ii %>% 
   filter(
     category %in% c(0) |
       (category %in% c(1) & x1 %in% c(1, 5) & x2 %in% c(2, 6))
@@ -56,17 +56,17 @@ tbl_x_ii_inb <- tbl_x_ii %>%
   ) %>% mutate(
     n = 10
   )
-tbl_x_ii_inb <- tbl_x_ii_inb[
-  sample(1:nrow(tbl_x_ii_inb), nrow(tbl_x_ii_inb), replace = FALSE), 
+tbl_x_ii_imb <- tbl_x_ii_imb[
+  sample(1:nrow(tbl_x_ii_imb), nrow(tbl_x_ii_imb), replace = FALSE), 
 ]
-tbl_x_ii_inb$trial_id <- seq(1, nrow(tbl_x_ii_inb), by = 1)
-# tbl_x_sq_inb$n[tbl_x_sq_inb$category %in% c(1, 2)] <- 3
+tbl_x_ii_imb$trial_id <- seq(1, nrow(tbl_x_ii_imb), by = 1)
+# tbl_x_sq_imb$n[tbl_x_sq_imb$category %in% c(1, 2)] <- 3
 
-plot_grid(tbl_x_ii_inb) + geom_abline()
+plot_grid(tbl_x_ii_imb) + geom_abline()
 
 
 
-l_samples_ii <- pmap(tbl_x_ii_inb[, c("x1", "x2", "category", "n")], sample_2d_stimuli, sd = .2)
+l_samples_ii <- pmap(tbl_x_ii_imb[, c("x1", "x2", "category", "n")], sample_2d_stimuli, sd = .2)
 tbl_samples_ii <- reduce(l_samples_ii, rbind)
 
 plot_grid(tbl_samples_ii) + geom_abline()
@@ -90,7 +90,7 @@ tbl_imb_weighted <- tbl_imb %>%
   arrange(trial_id)
 
 
-pl_inb <- plot_grid(tbl_imb_weighted %>% mutate(category = factor(category))) + ggtitle("Stimuli") + geom_abline()
+pl_imb <- plot_grid(tbl_imb_weighted %>% mutate(category = factor(category))) + ggtitle("Stimuli") + geom_abline()
 
 
 # the base models use all presented data points to predict on the transfer set
@@ -159,7 +159,7 @@ pl_gcm_baseline.1 <- plot_grid(tbl_category_probs.1) +
   geom_abline() + ggtitle("Baseline Classification, Bias = .1")
 
 # plot together
-grid.draw(arrangeGrob(pl_inb, pl_gcm_baseline.5, pl_gcm_baseline.1, nrow = 1))
+grid.draw(arrangeGrob(pl_imb, pl_gcm_baseline.5, pl_gcm_baseline.1, nrow = 1))
 
 
 
@@ -243,9 +243,9 @@ gcm_base(x_new, tbl_upsample, 2, c, w, 0, d_measure)
 categories <- c(0, 1)
 ns_upsample <- c(0, 10)
 
-l_tbl_upsample_inb <- map2(categories, ns_upsample, upsample, tbl_x = tbl_imb)
+l_tbl_upsample_imb <- map2(categories, ns_upsample, upsample, tbl_x = tbl_imb)
 # add small amount of noise to circumvent ties in rank ordering
-tbl_imb_upsample <- l_tbl_upsample_inb %>% reduce(rbind) %>% 
+tbl_imb_upsample <- l_tbl_upsample_imb %>% reduce(rbind) %>% 
   mutate(category = as.factor(category)) %>%
   left_join(tbl_imb[, c("x1", "x2", "category", "accuracy")], by = c("x1", "x2", "category")) %>%
   mutate(
@@ -356,7 +356,7 @@ tbl_importance <- tbl_imb_upsample %>%
 tbl_important_up <- importance_upsampling(
   tbl_importance, tbl_imb_weighted[, cols_req], params_ignorant$tf, 
   tbl_transfer %>% mutate(response = category),
-  n_feat = 2, d_measure = 1, lo = lo, hi = hi, n_max = 6
+  n_feat = 2, d_measure = 1, lo = lo, hi = hi, n_max = tbl_n_change$n_change[tbl_n_change$category == 1]
 )
 
 
@@ -378,3 +378,23 @@ pl_points_transfer <- plot_grid(tbl_transfer) + geom_abline() + ggtitle("Transfe
 pl_points_importance <- plot_new_and_dropped(tbl_all)
 
 grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance, nrow = 1))
+
+
+
+
+# Model Recovery ----------------------------------------------------------
+
+# Predict Data with different Models
+
+params_fin
+
+
+
+
+category_probs(params, tbl_transfer, tbl_important_down, 2, 1, lo, hi)
+
+params
+gcm_likelihood_no_forgetting(params, tbl_transfer, tbl_imb_weighted, 2, 1, lo, hi)
+gcm_likelihood_forgetting(params, tbl_transfer, tbl_imb_weighted, 2, 1, lo, hi)
+
+# Recover Models
