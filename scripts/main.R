@@ -404,10 +404,10 @@ grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance, n
 plot_grid(tbl_imb_weighted)
 plot_grid(tbl_important_down)
 
-c <- seq(.5, 2, length.out = 2)
-w <- seq(.2, .8, length.out = 2)
-bias <- seq(.2, .8, length.out = 2)
-n_reps <- c(1)
+c <- seq(.5, 2, length.out = 5)
+w <- seq(.2, .8, length.out = 5)
+bias <- seq(.2, .8, length.out = 5)
+n_reps <- c(5, 10, 20)
 tbl_params <- crossing(c, w, bias, n_reps)
 
 list_params <- pmap(tbl_params[, c("c", "w", "bias")], ~ list(
@@ -463,7 +463,7 @@ tbl_params_all <- cbind(
 )
 
 
-tbl_params_all %>%
+tbl_params_all <- tbl_params_all %>%
   summarize(
     c_c = cor(c, c_fit),
     c_w = cor(c, w_fit),
@@ -474,5 +474,21 @@ tbl_params_all %>%
     bias_c = cor(bias, c_fit),
     bias_w = cor(bias, w_fit),
     bias_bias = cor(bias, bias_fit)
-  )
+  ) %>% mutate(it = 1) %>% 
+  pivot_longer(-it) %>%
+  mutate(
+    gen = str_match(name, ("^(.+)_"))[, 2],
+    recover = str_match(name, ("_(.+)$"))[, 2]
+    )
 
+ggplot(tbl_params_all, aes(gen, recover)) +
+  geom_tile(aes(fill = value)) +
+  geom_label(aes(label = str_c("r = ", round(value, 2)))) +
+  theme_bw() +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "Generated", y = "Recovered") + 
+  theme(strip.background = element_rect(fill = "white")) + 
+  scale_fill_gradient2(low = "skyblue2", high = "tomato4", name = "Correlation")
