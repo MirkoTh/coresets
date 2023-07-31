@@ -8,6 +8,7 @@ library(smotefamily)
 library(furrr)
 library(MASS)
 library(docstring)
+library(rutils)
 
 path_load <- c("utils/utils.R")
 walk(path_load, source)
@@ -416,7 +417,7 @@ list_params <- pmap(tbl_params[, c("c", "w", "bias")], ~ list(
 ))
 l_n_reps <- map(tbl_params$n_reps, 1)
 
-future::plan(multisession, workers = future::availableCores() - 2)
+future::plan(multisession, workers = future::availableCores() - 4)
 l_results <- future_map2(
   .x = l_n_reps, .y = list_params, 
   .f = generate_and_fit, 
@@ -426,8 +427,13 @@ l_results <- future_map2(
   n_feat = n_feat, 
   d_measure = d_measure, 
   lo = lo, 
-  hi = hi
+  hi = hi,
+  .progress = TRUE
 )
+saveRDS(l_results, file = "data/recovery.RDS")
+
+
+l_results <- readRDS(file = "data/recovery.RDS")
 
 l_results_ll <- map(l_results, "n2lls")
 
@@ -443,18 +449,27 @@ tbl_lls <- cbind(
   delta = strat - orig
 )
 
+tbl_prop_success <- grouped_agg(tbl_lls %>% mutate(success = delta < 0), n_reps, success)
+
 ggplot(tbl_lls, aes(delta)) + 
   geom_histogram(color = "white", fill = "skyblue2") +
+  geom_vline(xintercept = 0, color = "black", linetype = "dotdash") +
+  geom_label(
+    data = tbl_prop_success, 
+    aes(x = -25, y = 15, 
+        label = str_c("Prop. Recov. = ", round(mean_success, 2))
+        )
+    ) + facet_wrap(~ n_reps) +
   theme_bw() +
   scale_x_continuous(expand = c(0, 0)) +
   scale_y_continuous(expand = c(0, 0)) +
-  labs(x = "Delta (Strat. Sampl. - Original)", y = "Nr. Simulations") + 
+  labs(x = "-2*LL Delta (Strat. Sampl. - Original)", y = "Nr. Simulations") + 
   theme(strip.background = element_rect(fill = "white")) + 
   scale_color_manual(values = c("skyblue2", "tomato4"), name = "")
 
 
 l_results_params <- map(l_results, "params_strat")
-tbl_params_fit <- reduce(map(l_results_params, "not_tf"), rbind)
+tbl_params_fit <- as.data.frame(reduce(map(l_results_params, "not_tf"), rbind))
 colnames(tbl_params_fit) <- c("c_fit", "w_fit", "bias_fit")
 
 tbl_params_all <- cbind(
@@ -464,6 +479,7 @@ tbl_params_all <- cbind(
 
 
 tbl_params_all <- tbl_params_all %>%
+  group_by(n_reps) %>%
   summarize(
     c_c = cor(c, c_fit),
     c_w = cor(c, w_fit),
@@ -474,8 +490,7 @@ tbl_params_all <- tbl_params_all %>%
     bias_c = cor(bias, c_fit),
     bias_w = cor(bias, w_fit),
     bias_bias = cor(bias, bias_fit)
-  ) %>% mutate(it = 1) %>% 
-  pivot_longer(-it) %>%
+  ) %>% pivot_longer(-n_reps) %>%
   mutate(
     gen = str_match(name, ("^(.+)_"))[, 2],
     recover = str_match(name, ("_(.+)$"))[, 2]
@@ -484,6 +499,7 @@ tbl_params_all <- tbl_params_all %>%
 ggplot(tbl_params_all, aes(gen, recover)) +
   geom_tile(aes(fill = value)) +
   geom_label(aes(label = str_c("r = ", round(value, 2)))) +
+  facet_wrap(~ n_reps) +
   theme_bw() +
   scale_x_continuous(expand = c(0, 0)) +
   scale_x_discrete(expand = c(0, 0)) +
