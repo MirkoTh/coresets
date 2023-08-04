@@ -113,8 +113,9 @@ tbl_imb_weighted <- tbl_imb %>%
   ) %>% mutate(trial_id = sample(1:nrow(.), nrow(.), replace = FALSE)) %>%
   arrange(trial_id)
 
-
-tbl_imb_weighted <- tbl_samples_ii
+# 
+# tbl_imb <- tbl_samples_ii
+# tbl_imb_weighted <- tbl_samples_ii
 
 
 pl_imb <- plot_grid(tbl_imb_weighted %>% mutate(category = factor(category))) + ggtitle("Stimuli") + geom_abline()
@@ -306,11 +307,11 @@ grid.draw(arrangeGrob(pl_train, pl_transfer, nrow = 1))
 
 #gcm_likelihood_no_forgetting(params_init, tbl_transfer, tbl_imb, 2, 1, lo, hi)
 
-params <- c(c = 1, w = .5, bias = .5)
+params <- c(c = 1, w = .5, bias = .5, delta = .5)
 
-lo <- c(0, .01, .0001)
-hi <- c(10, .99, .9999)
-params <- pmap(list(params, lo, hi), upper_and_lower_bounds)
+lo <- c(0, .01, .0001, 1e-10)
+hi <- c(10, .99, .9999, .999999999)
+params <- pmap(list(params[1:3], lo[1:3], hi[1:3]), upper_and_lower_bounds)
 params_init <- params
 
 
@@ -441,7 +442,7 @@ tbl_params <- crossing(c, w, bias, n_reps)
 
 list_params <- pmap(tbl_params[, c("c", "w", "bias")], ~ list(
   not_tf = c(c = ..1, w = ..2, bias = ..3),
-  tf = upper_and_lower_bounds(c(c = ..1, w = ..2, bias = ..3), lo, hi)
+  tf = upper_and_lower_bounds(c(c = ..1, w = ..2, bias = ..3), lo[1:3], hi[1:3])
 ))
 l_n_reps <- map(tbl_params$n_reps, 1)
 
@@ -467,24 +468,25 @@ l_results_ll <- map(l_results, "n2lls")
 
 ll_strat <- map_dbl(l_results_ll, "strategic")
 ll_orig <- map_dbl(l_results_ll, "original")
+ll_decay <- map_dbl(l_results_ll, "decay")
 tbl_lls <- cbind(
-  tbl_params, 
+  tbl_params[1:2, ], 
   tibble(
-    strat = ll_strat,
-    orig = ll_orig
+    bic_strat = 3*log(nrow(tbl_transfer)) + ll_strat,
+    bic_orig = 3*log(nrow(tbl_transfer)) + ll_orig,
+    bic_decay = 4*log(nrow(tbl_transfer)) + ll_decay,
+    bic_delta = bic_strat - pmin(bic_orig, bic_decay)
   )
-) %>% mutate(
-  delta = strat - orig
 )
 
-tbl_prop_success <- grouped_agg(tbl_lls %>% mutate(success = delta < 0), n_reps, success)
+tbl_prop_success <- grouped_agg(tbl_lls %>% mutate(success = bic_delta < 0), n_reps, success)
 
 ggplot(tbl_lls, aes(delta)) + 
   geom_histogram(color = "white", fill = "skyblue2") +
   geom_vline(xintercept = 0, color = "black", linetype = "dotdash") +
   geom_label(
     data = tbl_prop_success, 
-    aes(x = -25, y = 15, 
+    aes(x = -mean(tbl_lls$delta), y = nrow(tbl_lls)/20, 
         label = str_c("Prop. Recov. = ", round(mean_success, 2))
     )
   ) + facet_wrap(~ n_reps) +
@@ -494,6 +496,17 @@ ggplot(tbl_lls, aes(delta)) +
   labs(x = "-2*LL Delta (Strat. Sampl. - Original)", y = "Nr. Simulations") + 
   theme(strip.background = element_rect(fill = "white")) + 
   scale_color_manual(values = c("skyblue2", "tomato4"), name = "")
+
+
+ggplot(tbl_lls %>% pivot_longer(cols = c(bic_strat, bic_orig, bic_decay)), aes(name, value)) +
+  geom_violin(aes(fill = name)) + 
+  theme_bw() +
+  facet_wrap(~ n_reps, scales = "free_y") +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(.01, 0)) +
+  labs(x = "", y = "") +
+  theme(strip.background = element_rect(fill = "white"))
+  
 
 
 l_results_params <- map(l_results, "params_strat")
