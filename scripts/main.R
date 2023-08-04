@@ -54,21 +54,44 @@ tbl_x_ii_imb <- tbl_x_ii %>%
       (category %in% c(1) & x1 %in% c(1, 5) & x2 %in% c(2, 6))
     #| (category == 1 & x1 == 8 & x2 == 3) 
     # | (category == 2 & x1 == 3 & x2 == 8) 
-  ) %>% mutate(
-    n = 10
   )
 tbl_x_ii_imb <- tbl_x_ii_imb[
   sample(1:nrow(tbl_x_ii_imb), nrow(tbl_x_ii_imb), replace = FALSE), 
 ]
 tbl_x_ii_imb$trial_id <- seq(1, nrow(tbl_x_ii_imb), by = 1)
-# tbl_x_sq_imb$n[tbl_x_sq_imb$category %in% c(1, 2)] <- 3
+
+n_trials_total <- 300
+n_stim <- tbl_x_ii_imb %>% count(category)
+n_stimulus_reps <- tibble(
+  category = n_stim$category,
+  n = (n_trials_total / 2) / n_stim$n
+)
+
+tbl_x_ii_imb <- tbl_x_ii_imb %>% left_join(n_stimulus_reps, by = "category")
+
+
+
+#tbl_x_sq_imb$n[tbl_x_sq_imb$category %in% c(1, 2)] <- 3
 
 plot_grid(tbl_x_ii_imb) + geom_abline()
 
 
+tbl_x_ii_imb %>% count(category)
 
-l_samples_ii <- pmap(tbl_x_ii_imb[, c("x1", "x2", "category", "n")], sample_2d_stimuli, sd = .2)
-tbl_samples_ii <- reduce(l_samples_ii, rbind)
+overlap <- 1
+
+# do not allow samples to come from wrong category
+while(overlap > 0) {
+  l_samples_ii <- pmap(tbl_x_ii_imb[, c("x1", "x2", "category", "n")], sample_2d_stimuli, sd = .075)
+  tbl_samples_ii <- reduce(l_samples_ii, rbind)
+  tbl_overlap <- tbl_samples_ii %>% group_by(category) %>%
+    count(cat_wrong_1 = x1 >= x2, cat_wrong_0 = x2 >= x1) %>%
+    pivot_longer(cols = c(cat_wrong_0, cat_wrong_1)) %>%
+    mutate(cat_wrong = str_extract(name, "[0-9]$")) %>%
+    filter(value & as.numeric(as.character(category)) == cat_wrong)
+  if (nrow(tbl_overlap) == 0) {overlap <- 0}
+}
+
 
 plot_grid(tbl_samples_ii) + geom_abline()
 
@@ -89,6 +112,9 @@ tbl_imb_weighted <- tbl_imb %>%
     )
   ) %>% mutate(trial_id = sample(1:nrow(.), nrow(.), replace = FALSE)) %>%
   arrange(trial_id)
+
+
+tbl_imb_weighted <- tbl_samples_ii
 
 
 pl_imb <- plot_grid(tbl_imb_weighted %>% mutate(category = factor(category))) + ggtitle("Stimuli") + geom_abline()
@@ -186,7 +212,7 @@ plot_grid(tbl_x) +
 categories <- c(0, 1)
 ns_upsample <- c(0, 1000)
 
-l_tbl_upsample <- map2(categories, ns_upsample, upsample, tbl_x = tbl_x)
+l_tbl_upsample <- map2(categories, ns_upsample, upsample, tbl_x = tbl_x) # tbl_samples_ii
 tbl_upsample <- l_tbl_upsample %>% reduce(rbind) %>% mutate(trial_id = seq(1, nrow(.)))
 plot_grid(tbl_upsample %>% mutate(category = factor(category)))
 gcm_base(x_new, tbl_upsample, 2, c, w, 0, d_measure)
@@ -202,11 +228,6 @@ gcm_base(x_new, tbl_upsample, 2, c, w, 0, d_measure)
 # this makes sense only in the non-decay model, because importance or weight is given by the decay parameter
 # number of finally used items is controlled by capacity parameter
 
-
-# todo
-# create grid of 10 x 10 values crossing x1 and x2
-# 1. run gcm with upsampled data sets (few added points - many added points)
-# 2. run gcm with bias parameter varying from unbiased to very biased and plot probabilities category 0 over 100 grid points
 
 # main remaining issue: how is upsampling exactly achieved in the model? given I want to add n data points to one category
 # possible solution: do upsampling as currently implemented in upsample function, 
@@ -388,6 +409,13 @@ grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance, n
 
 # Model Recovery ----------------------------------------------------------
 
+# todos
+# compare strategic sampling model with decay gcm model, check that trial numbers of data points in training data set are ok
+# recover models with more data points (aka hot spots vs. grid with possibly 100 examples per category)
+
+
+
+
 # Predict Data with Strategic Sampling Model
 
 
@@ -458,8 +486,8 @@ ggplot(tbl_lls, aes(delta)) +
     data = tbl_prop_success, 
     aes(x = -25, y = 15, 
         label = str_c("Prop. Recov. = ", round(mean_success, 2))
-        )
-    ) + facet_wrap(~ n_reps) +
+    )
+  ) + facet_wrap(~ n_reps) +
   theme_bw() +
   scale_x_continuous(expand = c(0, 0)) +
   scale_y_continuous(expand = c(0, 0)) +
@@ -494,7 +522,7 @@ tbl_params_all <- tbl_params_all %>%
   mutate(
     gen = str_match(name, ("^(.+)_"))[, 2],
     recover = str_match(name, ("_(.+)$"))[, 2]
-    )
+  )
 
 ggplot(tbl_params_all, aes(gen, recover)) +
   geom_tile(aes(fill = value)) +
