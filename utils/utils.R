@@ -134,7 +134,7 @@ category_probs <- function(x, tbl_transfer, tbl_x, n_feat, d_measure, lo, hi) {
   #' 
   x <- pmap(list(x, lo, hi), upper_and_lower_bounds_revert)
   l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
-  l_category_probs <- map(l_transfer_x, gcm_base, tbl_x = tbl_x, n_feat = n_feat, c = x[[1]], w = x[[2]], bias = x[[3]], delta = ifelse(is.null(x[["delta"]]), 0, x[["delta"]]), d_measure = d_measure)
+  l_category_probs <- map(l_transfer_x, gcm_base, tbl_x = tbl_x, n_feat = n_feat, c = x[["c"]], w = x[["w"]], bias = x[["bias"]], delta = ifelse(is.null(x[["delta"]]), 0, x[["delta"]]), d_measure = d_measure)
   tbl_probs <- as.data.frame(reduce(l_category_probs, rbind)) %>% mutate(response = tbl_transfer$response)
   tbl_probs$prob_correct <- pmap_dbl(
     tbl_probs[, c("0", "1", "response")],
@@ -391,10 +391,15 @@ generate_and_fit <- function(n_reps, params, tbl_train_orig, tbl_train_strat, tb
   #' @description generate data given model and strategically sampled data
   #' and fit them given strategically sampled data or originally presented data
   
-  tbl_generate <- generate_data(n_reps, params, tbl_transfer, tbl_train_strat, n_feat, d_measure, lo, hi)
+  # generate data given strat. sampling model
+  tbl_generate <- generate_data(n_reps, params, tbl_transfer, tbl_train_strat, n_feat, d_measure, lo[1:3], hi[1:3])
   
+  # starting values for strat. sampling and default gcm model
   params_init <- c(c = 1, w = .5, bias = .5)
-  params_init_tf <- pmap(list(params_init, lo, hi), upper_and_lower_bounds)
+  params_init_tf <- pmap(list(params_init[1:3], lo[1:3], hi[1:3]), upper_and_lower_bounds)
+  # starting values for decay gcm model
+  params_init_decay <- c(c = 1, w = .5, bias = .5, delta = 0.5)
+  params_init_decay_tf <- pmap(list(params_init_decay, lo, hi), upper_and_lower_bounds)
   
   results_strat <- optim(
     params_init_tf,
@@ -403,12 +408,12 @@ generate_and_fit <- function(n_reps, params, tbl_train_orig, tbl_train_strat, tb
     tbl_x = tbl_train_strat, 
     n_feat = n_feat,
     d_measure = d_measure,
-    lo = lo,
-    hi = hi
+    lo = lo[1:3],
+    hi = hi[1:3]
   )
   
   params_strat <- list()
-  params_strat[["not_tf"]] <- pmap_dbl(list(results_strat$par, lo, hi), upper_and_lower_bounds_revert)
+  params_strat[["not_tf"]] <- pmap_dbl(list(results_strat$par, lo[1:3], hi[1:3]), upper_and_lower_bounds_revert)
   params_strat[["tf"]] <- results_strat$par
   
   
@@ -419,18 +424,39 @@ generate_and_fit <- function(n_reps, params, tbl_train_orig, tbl_train_strat, tb
     tbl_x = tbl_train_orig, 
     n_feat = n_feat,
     d_measure = d_measure,
+    lo = lo[1:3],
+    hi = hi[1:3]
+  )
+  
+  params_orig <- list()
+  params_orig[["not_tf"]] <- pmap_dbl(list(results_orig$par, lo[1:3], hi[1:3]), upper_and_lower_bounds_revert)
+  params_orig[["tf"]] <- results_orig$par
+  
+  results_decay <- optim(
+    params_init_decay_tf,
+    gcm_likelihood_forgetting,
+    tbl_transfer = tbl_generate,
+    tbl_x = tbl_train_orig, 
+    n_feat = n_feat,
+    d_measure = d_measure,
     lo = lo,
     hi = hi
   )
   
-  params_orig <- list()
-  params_orig[["not_tf"]] <- pmap_dbl(list(results_orig$par, lo, hi), upper_and_lower_bounds_revert)
-  params_orig[["tf"]] <- results_orig$par
-  
+  params_decay <- list()
+  params_decay[["not_tf"]] <- pmap_dbl(list(results_decay$par, lo, hi), upper_and_lower_bounds_revert)
+  params_decay[["tf"]] <- results_decay$par
+
   n2lls <- list()
   n2lls[["strategic"]] <- results_strat$value
   n2lls[["original"]] <- results_orig$value
+  n2lls[["decay"]] <- results_decay$value
   
-  return(list(params_strat = params_strat, n2lls = n2lls))
+  return(list(
+    n2lls = n2lls, 
+    params_strat = params_strat, 
+    params_orig = params_orig, 
+    params_decay = params_decay
+    ))
 }
 
