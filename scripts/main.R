@@ -403,7 +403,7 @@ plot_grid(tbl_important_up)
 
 
 # downsampling only on majority category
-# takes about 8.5 mins for 150 stimuli in majority category
+# takes about 6.5 mins for 150 stimuli in majority category
 t_start <- Sys.time()
 tbl_important_down <- importance_downsampling(
   tbl_important_up[, cols_req], params_fin$tf, 
@@ -420,7 +420,7 @@ tbl_important_down <- tbl_important_down %>%
 
 plot_grid(tbl_important_down)
 
-tbl_all <- mark_changes(tbl_important_down, tbl_imb_weighted)
+tbl_all <- mark_changes(tbl_important_down, tbl_clusters %>% mutate(cat_structure = "Information Integration"))
 
 
 pl_points_obs <- plot_grid(tbl_imb %>% mutate(category = factor(category))) + 
