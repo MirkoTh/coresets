@@ -91,6 +91,8 @@ while(overlap > 0) {
     filter(value & as.numeric(as.character(category)) == cat_wrong)
   if (nrow(tbl_overlap) == 0) {overlap <- 0}
 }
+tbl_samples_ii <- tbl_samples_ii %>%
+  mutate(trial_id = sample(1:nrow(.), nrow(.)))
 
 
 plot_grid(tbl_samples_ii) + geom_abline()
@@ -113,9 +115,9 @@ tbl_imb_weighted <- tbl_imb %>%
   ) %>% mutate(trial_id = sample(1:nrow(.), nrow(.), replace = FALSE)) %>%
   arrange(trial_id)
 
-# 
-# tbl_imb <- tbl_samples_ii
-# tbl_imb_weighted <- tbl_samples_ii
+# use samples instead of data points on the grid
+tbl_imb <- tbl_samples_ii
+tbl_imb_weighted <- tbl_samples_ii
 
 
 pl_imb <- plot_grid(tbl_imb_weighted %>% mutate(category = factor(category))) + ggtitle("Stimuli") + geom_abline()
@@ -136,9 +138,9 @@ plot_grid(tbl_transfer) + geom_abline()
 
 # add a bit of noise to circumvent ties in rank ordering
 # when calculating importance
-
-tbl_imb[, c("x1", "x2", "category")] <- add_jitter(tbl_imb)
-tbl_imb_weighted[, c("x1", "x2", "category")] <- add_jitter(tbl_imb_weighted)
+# 
+# tbl_imb[, c("x1", "x2", "category")] <- add_jitter(tbl_imb)
+# tbl_imb_weighted[, c("x1", "x2", "category")] <- add_jitter(tbl_imb_weighted)
 tbl_transfer[, c("x1", "x2", "category")] <- add_jitter(tbl_transfer)
 
 
@@ -261,16 +263,25 @@ gcm_base(x_new, tbl_upsample, 2, c, w, 0, d_measure)
 
 
 
+
+clusters_minority <- kmeans(tbl_imb[tbl_imb$category == 1, c("x1", "x2")], 3)
+tbl_clusters <- tibble(as.data.frame(clusters_minority$centers)) %>%
+  mutate(category = 1) %>%
+  rbind(tbl_imb %>% filter(category == 0) %>% dplyr::select(x1, x2, category))
+tbl_clusters <- simulate_responses(tbl_clusters)
+
 # first, upsample sufficient number of data points for the minority category
 # for one category
 categories <- c(0, 1)
-ns_upsample <- c(0, 10)
+ns_upsample <- c(0, 9)
 
-l_tbl_upsample_imb <- map2(categories, ns_upsample, upsample, tbl_x = tbl_imb)
+l_tbl_upsample_imb <- map2(categories, ns_upsample, upsample, tbl_x = tbl_clusters)
 # add small amount of noise to circumvent ties in rank ordering
+
+# left_join on tbl_imb before using tbl_clusters
 tbl_imb_upsample <- l_tbl_upsample_imb %>% reduce(rbind) %>% 
   mutate(category = as.factor(category)) %>%
-  left_join(tbl_imb[, c("x1", "x2", "category", "accuracy")], by = c("x1", "x2", "category")) %>%
+  left_join(tbl_clusters[, c("x1", "x2", "category", "accuracy")], by = c("x1", "x2", "category")) %>%
   mutate(
     is_new = is.na(accuracy)
   ) %>% dplyr::select(-accuracy) %>%
@@ -279,8 +290,8 @@ tbl_imb_upsample <- l_tbl_upsample_imb %>% reduce(rbind) %>%
   ungroup() %>%
   mutate(
     trial_id = seq(1, nrow(.)),
-    x1 = x1 + rnorm(nrow(.), 0, .01),
-    x2 = x2 + rnorm(nrow(.), 0, .01),
+    # x1 = x1 + rnorm(nrow(.), 0, .01),
+    # x2 = x2 + rnorm(nrow(.), 0, .01),
     response = category
   )
 plot_grid(tbl_imb_upsample %>% mutate(category = factor(category))) + geom_abline()
@@ -324,17 +335,17 @@ results_pre <- optim(
   tbl_x = tbl_imb_weighted, 
   n_feat = 2,
   d_measure = 1,
-  lo = lo,
-  hi = hi
+  lo = lo[1:3],
+  hi = hi[1:3]
 )
 t_end <- Sys.time()
 round(t_end - t_start, 1)
 
 params_fin <- list()
-params_fin[["not_tf"]] <- pmap_dbl(list(results_pre$par, lo, hi), upper_and_lower_bounds_revert)
+params_fin[["not_tf"]] <- pmap_dbl(list(results_pre$par, lo[1:3], hi[1:3]), upper_and_lower_bounds_revert)
 params_fin[["tf"]] <- results_pre$par
 params_ignorant <- list()
-params_ignorant[["tf"]] <- pmap_dbl(list(c(c = 1, w = .5, bias = .5), lo, hi), upper_and_lower_bounds)
+params_ignorant[["tf"]] <- pmap_dbl(list(c(c = 1, w = .5, bias = .5), lo[1:3], hi[1:3]), upper_and_lower_bounds)
 params_ignorant[["not_tf"]] <- c(c = 1, w = .5, bias = .5)
 params_fin[["not_tf"]]
 params_ignorant[["not_tf"]]
@@ -376,19 +387,33 @@ cols_req <- c("x1", "x2", "category", "response")
 tbl_importance <- tbl_imb_upsample %>% 
   filter(category == 1 & is_new) %>% 
   dplyr::select(-is_new)
+
+
+t_start <- Sys.time()
 tbl_important_up <- importance_upsampling(
-  tbl_importance, tbl_imb_weighted[, cols_req], params_ignorant$tf, 
+  tbl_importance, tbl_clusters[, cols_req], params_ignorant$tf, 
   tbl_transfer %>% mutate(response = category),
-  n_feat = 2, d_measure = 1, lo = lo, hi = hi, n_max = tbl_n_change$n_change[tbl_n_change$category == 1]
+  n_feat = 2, d_measure = 1, lo = lo[1:3], hi = hi[1:3], n_max = 6
 )
+t_end <- Sys.time()
+round(t_end - t_start, 1)
+
+plot_grid(tbl_important_up)
+
 
 
 # downsampling only on majority category
+# takes about 8.5 mins for 150 stimuli in majority category
+t_start <- Sys.time()
 tbl_important_down <- importance_downsampling(
   tbl_important_up[, cols_req], params_fin$tf, 
   tbl_transfer %>% mutate(response = category), n_feat = 2, d_measure = 1, 
-  lo = lo, hi = hi, cat_down = 0, n_max = n_unique_per_category
+  lo = lo[1:3], hi = hi[1:3], cat_down = 0, n_max = 9
 )
+t_end <- Sys.time()
+round(t_end - t_start, 1)
+
+
 tbl_important_down <- tbl_important_down %>%
   mutate(trial_id = sample(1:nrow(.), nrow(.), replace = FALSE)) %>%
   arrange(trial_id)
