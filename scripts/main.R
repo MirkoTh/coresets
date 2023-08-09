@@ -125,7 +125,7 @@ pl_imb <- plot_grid(tbl_imb_weighted %>% mutate(category = factor(category))) + 
 
 # the base models use all presented data points to predict on the transfer set
 
-# create 10 x 10 grid of data points as a transfer set
+# create representative grid of data points as transfer set
 
 tbl_transfer <- tbl_x_ii %>%
   mutate(
@@ -148,13 +148,10 @@ tbl_imb <- simulate_responses(tbl_imb)
 tbl_imb_weighted <- simulate_responses(tbl_imb_weighted)
 tbl_transfer <- simulate_responses(tbl_transfer)
 
-# tbl_imb_old <- tbl_imb
-# tbl_imb_weighted_old <- tbl_imb_weighted
-# tbl_transfer_old <- tbl_transfer
-# 
-# tbl_transfer$response == tbl_transfer_old$response
-# tbl_imb$response == tbl_imb_old$response
-# tbl_imb_weighted$response == tbl_imb_weighted_old$response
+
+
+# The Effect of Category Bias ---------------------------------------------
+
 
 # base model with bias term = .5
 l_category_probs.5 <- map(l_transfer_x, gcm_base, tbl_x = tbl_imb, n_feat = 2, c = 1, w = .5, bias = .5, delta = 0, d_measure = 1)
@@ -209,7 +206,8 @@ gcm_base(x_new, tbl_x, 2, c, w, bias, 0, d_measure)
 
 
 plot_grid(tbl_x) +
-  geom_abline() + coord_cartesian(xlim = c(1, max(tbl_x$x1)), ylim = c(1, max(tbl_x$x2)))
+  geom_abline() + coord_cartesian(xlim = c(1, max(tbl_x$x1)), ylim = c(1, max(tbl_x$x2))) +
+  ggstar::geom_star(data = x_new %>% mutate(category = 3), aes(x1, x2))
 
 # for one category
 categories <- c(0, 1)
@@ -269,6 +267,7 @@ tbl_clusters <- tibble(as.data.frame(clusters_minority$centers)) %>%
   mutate(category = 1) %>%
   rbind(tbl_imb %>% filter(category == 0) %>% dplyr::select(x1, x2, category))
 tbl_clusters <- simulate_responses(tbl_clusters)
+plot_grid(tbl_clusters) + geom_abline()
 
 # first, upsample sufficient number of data points for the minority category
 # for one category
@@ -326,7 +325,7 @@ params <- pmap(list(params[1:3], lo[1:3], hi[1:3]), upper_and_lower_bounds)
 params_init <- params
 
 
-
+# takes approx 1 min to run on lab computer
 t_start <- Sys.time()
 results_pre <- optim(
   params_init,
@@ -344,12 +343,6 @@ round(t_end - t_start, 1)
 params_fin <- list()
 params_fin[["not_tf"]] <- pmap_dbl(list(results_pre$par, lo[1:3], hi[1:3]), upper_and_lower_bounds_revert)
 params_fin[["tf"]] <- results_pre$par
-params_ignorant <- list()
-params_ignorant[["tf"]] <- pmap_dbl(list(c(c = 1, w = .5, bias = .5), lo[1:3], hi[1:3]), upper_and_lower_bounds)
-params_ignorant[["not_tf"]] <- c(c = 1, w = .5, bias = .5)
-params_fin[["not_tf"]]
-params_ignorant[["not_tf"]]
-
 
 
 tbl_imb_weighted %>%
@@ -375,7 +368,7 @@ tbl_imb_weighted %>%
 # First Up, Then Down -----------------------------------------------------
 
 
-n_unique_per_category <- 9
+n_unique_per_category <- 6
 tbl_n_change <- tbl_imb_weighted %>%
   mutate(x1 = round(x1, 0), x2 = round(x2, 0)) %>%
   count(x1, x2, category) %>% count(category) %>%
@@ -384,16 +377,18 @@ tbl_n_change <- tbl_imb_weighted %>%
 cols_req <- c("x1", "x2", "category", "response")
 
 # upsampling only on minority category
+# takes approx. 10 seconds on lab computer
+
 tbl_importance <- tbl_imb_upsample %>% 
   filter(category == 1 & is_new) %>% 
   dplyr::select(-is_new)
-
+n_add <- n_unique_per_category - nrow(tbl_imb_upsample %>% filter(category == 1 & !is_new))
 
 t_start <- Sys.time()
 tbl_important_up <- importance_upsampling(
-  tbl_importance, tbl_clusters[, cols_req], params_ignorant$tf, 
+  tbl_importance, tbl_imb_weighted[, cols_req], params_fin$tf, 
   tbl_transfer %>% mutate(response = category),
-  n_feat = 2, d_measure = 1, lo = lo[1:3], hi = hi[1:3], n_max = 6
+  n_feat = 2, d_measure = 1, lo = lo[1:3], hi = hi[1:3], n_add = n_add
 )
 t_end <- Sys.time()
 round(t_end - t_start, 1)
@@ -403,16 +398,25 @@ plot_grid(tbl_important_up)
 
 
 # downsampling only on majority category
-# takes about 6.5 mins for 150 stimuli in majority category
+# takes about 6.5 mins for 150 stimuli in majority category on laptop
+# takes about 8.4 mins for 150 stimuli in majority category on lab computer
 t_start <- Sys.time()
 tbl_important_down <- importance_downsampling(
-  tbl_important_up[, cols_req], params_fin$tf, 
+  tbl_imb_weighted[, cols_req], params_fin$tf, 
   tbl_transfer %>% mutate(response = category), n_feat = 2, d_measure = 1, 
-  lo = lo[1:3], hi = hi[1:3], cat_down = 0, n_max = 9
+  lo = lo[1:3], hi = hi[1:3], cat_down = 0, n_keep = n_unique_per_category
 )
 t_end <- Sys.time()
 round(t_end - t_start, 1)
 
+
+tbl_up_and_down <- rbind(tbl_important_up, tbl_important_down %>% dplyr::select(-c(importance, rank_importance)))
+tbl_changes_up <- mark_changes(tbl_important_up, tbl_imb_weighted %>% mutate(cat_structure = "Information Integration"))
+tbl_changes_down <- mark_changes(tbl_important_down, tbl_imb_weighted %>% mutate(cat_structure = "Information Integration"))
+tbl_up_and_down <- tbl_changes_up %>% filter(is_new) %>%
+  rbind(tbl_changes_down %>% filter(!is_dropped & category == 0)) %>%
+  rbind(tbl_clusters %>% filter(category == 1) %>% dplyr::select(x1, x2, category) %>% mutate(is_new = FALSE, is_dropped = FALSE))
+plot_grid(tbl_up_and_down)
 
 tbl_important_down <- tbl_important_down %>%
   mutate(trial_id = sample(1:nrow(.), nrow(.), replace = FALSE)) %>%
@@ -420,13 +424,10 @@ tbl_important_down <- tbl_important_down %>%
 
 plot_grid(tbl_important_down)
 
-tbl_all <- mark_changes(tbl_important_down, tbl_clusters %>% mutate(cat_structure = "Information Integration"))
-
-
 pl_points_obs <- plot_grid(tbl_imb %>% mutate(category = factor(category))) + 
   geom_abline() + ggtitle("Observed")
 pl_points_transfer <- plot_grid(tbl_transfer) + geom_abline() + ggtitle("Transfer")
-pl_points_importance <- plot_new_and_dropped(tbl_all)
+pl_points_importance <- plot_new_and_dropped(tbl_up_and_down %>% rbind(tbl_changes_down %>% filter(category == 0)))
 
 grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance, nrow = 1))
 
@@ -506,12 +507,12 @@ tbl_lls <- cbind(
 
 tbl_prop_success <- grouped_agg(tbl_lls %>% mutate(success = bic_delta < 0), n_reps, success)
 
-ggplot(tbl_lls, aes(delta)) + 
+ggplot(tbl_lls, aes(bic_delta)) + 
   geom_histogram(color = "white", fill = "skyblue2") +
   geom_vline(xintercept = 0, color = "black", linetype = "dotdash") +
   geom_label(
     data = tbl_prop_success, 
-    aes(x = -mean(tbl_lls$delta), y = nrow(tbl_lls)/20, 
+    aes(x = -mean(tbl_lls$bic_delta), y = nrow(tbl_lls)/20, 
         label = str_c("Prop. Recov. = ", round(mean_success, 2))
     )
   ) + facet_wrap(~ n_reps) +
@@ -524,7 +525,7 @@ ggplot(tbl_lls, aes(delta)) +
 
 
 ggplot(tbl_lls %>% pivot_longer(cols = c(bic_strat, bic_orig, bic_decay)), aes(name, value)) +
-  geom_violin(aes(fill = name)) + 
+  geom_boxplot(aes(fill = name)) + 
   theme_bw() +
   facet_wrap(~ n_reps, scales = "free_y") +
   scale_x_discrete(expand = c(0, 0)) +
