@@ -201,8 +201,8 @@ remove_sample <- function(rwn_remove, tbl_base, params, tbl_transfer, n_feat, d_
 }
 
 
-importance_upsampling <- function(tbl_importance, tbl_imb_plus, params, tbl_transfer, n_feat, d_measure, lo, hi, n_max = 10) {
-  #' @description add n_max most important upsampled data points to the training set
+importance_upsampling <- function(tbl_importance, tbl_imb_plus, params, tbl_transfer, n_feat, d_measure, lo, hi, n_add = 10) {
+  #' @description add n_add most important upsampled data points to the training set
 
   
   l_new_samples <- split(tbl_importance %>% dplyr::select(-trial_id), tbl_importance$trial_id)
@@ -211,7 +211,7 @@ importance_upsampling <- function(tbl_importance, tbl_imb_plus, params, tbl_tran
   l_samples <- l_new_samples
   # sequential importance sampling
   # optimizes labels on training data
-  for (i in 1:n_max) {
+  for (i in 1:n_add) {
     v_importance <- future_map_dbl(
       l_samples, add_sample, tbl_base = tbl_imb_plus, params = params, 
       tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1,
@@ -232,15 +232,15 @@ importance_upsampling <- function(tbl_importance, tbl_imb_plus, params, tbl_tran
 }
 
 
-importance_downsampling <- function(tbl_imb, params, tbl_transfer, n_feat, d_measure, lo, hi, cat_down, n_max = 10) {
-  #' @description remove n_max least important upsampled data points from the training set
+importance_downsampling <- function(tbl_imb, params, tbl_transfer, n_feat, d_measure, lo, hi, cat_down, n_keep = 10) {
+  #' @description remove n_keep least important upsampled data points from the training set
 
   future::plan(multisession, workers = future::availableCores() - 2)
   # sequential importance sampling
   tbl_drop <- tbl_imb
   
   
-  while (nrow(tbl_drop %>% filter(category == cat_down)) > n_max) {
+  while (nrow(tbl_drop %>% filter(category == cat_down)) > n_keep) {
     rows_to_drop <- which(tbl_drop$category == cat_down)
     v_importance <- future_map_dbl(
       rows_to_drop, remove_sample, tbl_base = tbl_drop, params = params, 
@@ -353,8 +353,8 @@ mark_changes <- function(tbl_final, tbl_original) {
 plot_new_and_dropped <- function(tbl_all) {
   ggplot(tbl_all, aes(x1, x2, group = category)) + 
   geom_point(aes(color = category, alpha = is_dropped)) + 
-  geom_point(aes(size = as.numeric(is_new), alpha = is_dropped), shape = 1) +
-  geom_point(aes(size = as.numeric(is_dropped)), shape = 1) +
+  geom_point(aes(size = as.numeric(is_new), alpha = is_dropped), shape = 1, color = "grey70") +
+  geom_point(aes(size = as.numeric(is_dropped)), shape = 1, color = "grey70") +
   theme_bw() +
   scale_alpha_manual(values = c(1, 0), guide = "none") +
   scale_size_manual(guide = "none") +
