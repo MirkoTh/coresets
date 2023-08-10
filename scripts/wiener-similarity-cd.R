@@ -120,6 +120,8 @@ plot(dwiener(seq(0, 5, by = .01), 2, .3, .5, .5, resp = rep("upper", 501)))
 
 
 wiener_reg_delta_log <- function(x, my_tbl) {
+  #' @description Wiener LL with linear regression on drift rate
+
   alpha <- x[[1]]
   tau <- x[[2]]
   beta <- x[[3]]
@@ -127,11 +129,12 @@ wiener_reg_delta_log <- function(x, my_tbl) {
   delta_slope <- x[[5]]
   
   lik <- pmap_dbl(
-    my_tbl[, c("rt", "resp_recode", "setSize")], ~ dwiener(
+    my_tbl[, c("rt", "resp_recode", "c_size")], ~ dwiener(
       q = ..1, alpha = alpha, tau = tau, beta = beta, 
       delta = delta_ic + delta_slope * ..3, resp = ..2
     )
   )
+  
   neg2loglik <- -2*sum(log(pmax(lik,1e-10)))
   
   return(neg2loglik)
@@ -148,7 +151,7 @@ tbl_cd %>% filter(resp == 1 & c_size > 0) %>%
 
 tbl_cd$resp_recode <- map_chr(tbl_cd$resp + 1, ~ c("upper", "lower")[.x])
 
-optim(c(1, .1, .1, 1, .05), wiener_reg_delta_log, my_tbl = tbl_cd[1:1000, ])
+optim(c(1, .1, .1, 1, .05), wiener_reg_delta_log, my_tbl = tbl_cd[1:1000, ] %>% mutate(c_size = abs(c_size)))
 
 
 
