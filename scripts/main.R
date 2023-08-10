@@ -487,10 +487,11 @@ list_params <- pmap(tbl_params[, c("c", "w", "bias")], ~ list(
   tf = upper_and_lower_bounds(c(c = ..1, w = ..2, bias = ..3), lo[1:3], hi[1:3])
 ))
 l_n_reps <- map(tbl_params$n_reps, 1)
+l_ks <- map(tbl_params$k, 1)
 
 future::plan(multisession, workers = future::availableCores() - 4)
 l_results <- future_pmap(
-  .x = l_n_reps, .y = list_params, 
+  .l = list(l_n_reps, list_params, l_ks),
   .f = generate_and_fit, 
   tbl_train_orig = tbl_imb_weighted, 
   l_tbl_train_strat = l_tbl_up_and_down, 
