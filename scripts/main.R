@@ -368,7 +368,7 @@ tbl_imb_weighted %>%
 # First Up, Then Down -----------------------------------------------------
 
 
-n_unique_per_category <- 6
+n_unique_per_category <- 10
 tbl_n_change <- tbl_imb_weighted %>%
   mutate(x1 = round(x1, 0), x2 = round(x2, 0)) %>%
   count(x1, x2, category) %>% count(category) %>%
@@ -385,7 +385,7 @@ tbl_importance <- tbl_imb_upsample %>%
 n_add <- n_unique_per_category - nrow(tbl_imb_upsample %>% filter(category == 1 & !is_new))
 
 t_start <- Sys.time()
-tbl_important_up <- importance_upsampling(
+l_tbl_important_up <- importance_upsampling(
   tbl_importance, tbl_imb_weighted[, cols_req], params_fin$tf, 
   tbl_transfer %>% mutate(response = category),
   n_feat = 2, d_measure = 1, lo = lo[1:3], hi = hi[1:3], n_add = n_add
@@ -393,6 +393,7 @@ tbl_important_up <- importance_upsampling(
 t_end <- Sys.time()
 round(t_end - t_start, 1)
 
+tbl_important_up <- l_tbl_important_up[[n_add]]
 plot_grid(tbl_important_up)
 
 
@@ -400,22 +401,36 @@ plot_grid(tbl_important_up)
 # downsampling only on majority category
 # takes about 6.5 mins for 150 stimuli in majority category on laptop
 # takes about 8.4 mins for 150 stimuli in majority category on lab computer
+l_tbl_important_down <- list()
 t_start <- Sys.time()
-tbl_important_down <- importance_downsampling(
+l_tbl_important_down <- importance_downsampling(
   tbl_imb_weighted[, cols_req], params_fin$tf, 
   tbl_transfer %>% mutate(response = category), n_feat = 2, d_measure = 1, 
-  lo = lo[1:3], hi = hi[1:3], cat_down = 0, n_keep = n_unique_per_category
+  lo = lo[1:3], hi = hi[1:3], cat_down = 0, n_keep_max = n_unique_per_category
 )
 t_end <- Sys.time()
 round(t_end - t_start, 1)
 
+tbl_important_down <- l_tbl_important_down[[n_unique_per_category]]
 
-tbl_up_and_down <- rbind(tbl_important_up, tbl_important_down %>% dplyr::select(-c(importance, rank_importance)))
-tbl_changes_up <- mark_changes(tbl_important_up, tbl_imb_weighted %>% mutate(cat_structure = "Information Integration"))
-tbl_changes_down <- mark_changes(tbl_important_down, tbl_imb_weighted %>% mutate(cat_structure = "Information Integration"))
-tbl_up_and_down <- tbl_changes_up %>% filter(is_new) %>%
-  rbind(tbl_changes_down %>% filter(!is_dropped & category == 0)) %>%
-  rbind(tbl_clusters %>% filter(category == 1) %>% dplyr::select(x1, x2, category) %>% mutate(is_new = FALSE, is_dropped = FALSE))
+l_tbl_up_and_down <- list()
+l_tbl_changes_up <- list()
+l_tbl_changes_down <- list()
+
+
+for (i in 1:length(l_tbl_important_up)) {
+  tbl_up_and_down <- rbind(l_tbl_important_up[[i]], l_tbl_important_down[[i + 3]] %>% dplyr::select(-c(importance, rank_importance)))
+  l_tbl_changes_up[[i]] <- mark_changes(l_tbl_important_up[[i]], tbl_imb_weighted %>% mutate(cat_structure = "Information Integration"))
+  l_tbl_changes_down[[i]] <- mark_changes(l_tbl_important_down[[i + 3]], tbl_imb_weighted %>% mutate(cat_structure = "Information Integration"))
+  l_tbl_up_and_down[[i]] <- l_tbl_changes_up[[i]] %>% filter(is_new) %>%
+    rbind(l_tbl_changes_down[[i]] %>% filter(!is_dropped & category == 0)) %>%
+    rbind(tbl_clusters %>% filter(category == 1) %>% dplyr::select(x1, x2, category) %>% mutate(is_new = FALSE, is_dropped = FALSE))
+  
+}
+
+saveRDS(l_tbl_up_and_down, "data/l_tbl_up_and_down.RDS")
+
+
 plot_grid(tbl_up_and_down)
 
 tbl_important_down <- tbl_important_down %>%
@@ -427,7 +442,7 @@ plot_grid(tbl_important_down)
 pl_points_obs <- plot_grid(tbl_imb %>% mutate(category = factor(category))) + 
   geom_abline() + ggtitle("Observed")
 pl_points_transfer <- plot_grid(tbl_transfer) + geom_abline() + ggtitle("Transfer")
-pl_points_importance <- plot_new_and_dropped(tbl_up_and_down %>% rbind(tbl_changes_down %>% filter(category == 0)))
+pl_points_importance <- plot_new_and_dropped(l_tbl_up_and_down[[3]] %>% rbind(l_tbl_changes_down[[3]] %>% filter(category == 0)))
 
 grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance, nrow = 1))
 
@@ -458,13 +473,14 @@ grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance, n
 
 
 plot_grid(tbl_imb_weighted)
-plot_grid(tbl_important_down)
+plot_grid(tbl_up_and_down)
 
 c <- seq(.5, 2, length.out = 5)
 w <- seq(.2, .8, length.out = 5)
 bias <- seq(.2, .8, length.out = 5)
 n_reps <- c(5, 10, 20)
-tbl_params <- crossing(c, w, bias, n_reps)
+k <- seq(1, 10, by = 1)
+tbl_params <- crossing(c, w, bias, n_reps, k)
 
 list_params <- pmap(tbl_params[, c("c", "w", "bias")], ~ list(
   not_tf = c(c = ..1, w = ..2, bias = ..3),
@@ -473,11 +489,11 @@ list_params <- pmap(tbl_params[, c("c", "w", "bias")], ~ list(
 l_n_reps <- map(tbl_params$n_reps, 1)
 
 future::plan(multisession, workers = future::availableCores() - 4)
-l_results <- future_map2(
+l_results <- future_pmap(
   .x = l_n_reps, .y = list_params, 
   .f = generate_and_fit, 
   tbl_train_orig = tbl_imb_weighted, 
-  tbl_train_strat = tbl_important_down, 
+  l_tbl_train_strat = l_tbl_up_and_down, 
   tbl_transfer = tbl_transfer, 
   n_feat = n_feat, 
   d_measure = d_measure, 
@@ -485,10 +501,11 @@ l_results <- future_map2(
   hi = hi,
   .progress = TRUE
 )
-saveRDS(l_results, file = "data/recovery.RDS")
+future::plan("default")
+saveRDS(l_results, file = "data/recovery-hotspots.RDS")
 
 
-l_results <- readRDS(file = "data/recovery.RDS")
+l_results <- readRDS(file = "data/recovery-hotspots.RDS")
 
 l_results_ll <- map(l_results, "n2lls")
 
@@ -532,7 +549,7 @@ ggplot(tbl_lls %>% pivot_longer(cols = c(bic_strat, bic_orig, bic_decay)), aes(n
   scale_y_continuous(expand = c(.01, 0)) +
   labs(x = "", y = "") +
   theme(strip.background = element_rect(fill = "white"))
-  
+
 
 
 l_results_params <- map(l_results, "params_strat")

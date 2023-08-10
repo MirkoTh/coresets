@@ -1,6 +1,6 @@
 plot_grid <- function(tbl) {
   #' @description plot 2D grid of x1 and x2 data points
-    ggplot(tbl, aes(x1, x2, group = category)) + 
+  ggplot(tbl, aes(x1, x2, group = category)) + 
     geom_point(aes(color = category)) + 
     theme_bw() +
     scale_x_continuous(expand = c(.1, .1), breaks = seq(2, 10, by = 2)) +
@@ -9,7 +9,6 @@ plot_grid <- function(tbl) {
     theme(strip.background = element_rect(fill = "white")) +
     scale_color_viridis_d(name = "Category")
 }
-
 
 
 sample_2d_stimuli <- function(x1, x2, category, n, sd) {
@@ -188,7 +187,7 @@ add_sample <- function(tbl_new_sample, tbl_base, params, tbl_transfer, n_feat, d
     params, tbl_transfer, 
     tbl_x = rbind(tbl_base, tbl_new_sample) %>% mutate(trial_id = 1:(nrow(tbl_base) + 1)),
     n_feat = 2, d_measure = 1, lo = lo, hi = hi
-    )
+  )
 }
 
 
@@ -197,18 +196,19 @@ remove_sample <- function(rwn_remove, tbl_base, params, tbl_transfer, n_feat, d_
   f_likelihood(
     params, tbl_transfer, tbl_x = tbl_base[-rwn_remove, ] %>% mutate(trial_id = 1:(nrow(tbl_base) - 1)),
     n_feat = 2, d_measure = 1, lo = lo, hi = hi
-    )
+  )
 }
 
 
 importance_upsampling <- function(tbl_importance, tbl_imb_plus, params, tbl_transfer, n_feat, d_measure, lo, hi, n_add = 10) {
   #' @description add n_add most important upsampled data points to the training set
-
+  
   
   l_new_samples <- split(tbl_importance %>% dplyr::select(-trial_id), tbl_importance$trial_id)
   
   future::plan(multisession, workers = future::availableCores() - 2)
   l_samples <- l_new_samples
+  l_tbl_add <- list()
   # sequential importance sampling
   # optimizes labels on training data
   for (i in 1:n_add) {
@@ -216,7 +216,7 @@ importance_upsampling <- function(tbl_importance, tbl_imb_plus, params, tbl_tran
       l_samples, add_sample, tbl_base = tbl_imb_plus, params = params, 
       tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1,
       f_likelihood = gcm_likelihood_no_forgetting, lo = lo, hi = hi
-      )
+    )
     tbl_importance$importance <- v_importance
     # pick best imagined data point
     tbl_importance <- tbl_importance %>% mutate(rank_importance = rank(importance, ties.method = "min"))
@@ -225,28 +225,33 @@ importance_upsampling <- function(tbl_importance, tbl_imb_plus, params, tbl_tran
     idx_chosen_point <- which.min(v_importance)
     tbl_importance <- tbl_importance[-idx_chosen_point,]
     l_samples <- l_samples[-idx_chosen_point]
+    l_tbl_add[[i]] <- tbl_imb_plus
   }
   
   future::plan("default")
-  return(tbl_imb_plus)
+  return(l_tbl_add)
 }
 
 
-importance_downsampling <- function(tbl_imb, params, tbl_transfer, n_feat, d_measure, lo, hi, cat_down, n_keep = 10) {
+importance_downsampling <- function(tbl_imb, params, tbl_transfer, n_feat, d_measure, lo, hi, cat_down, n_keep_max = 10) {
   #' @description remove n_keep least important upsampled data points from the training set
-
+  
   future::plan(multisession, workers = future::availableCores() - 2)
   # sequential importance sampling
   tbl_drop <- tbl_imb
   
+  l_tbl_drop <- list()
   
-  while (nrow(tbl_drop %>% filter(category == cat_down)) > n_keep) {
+  
+  n_keep_min <- 0
+  nrow_drop <- nrow(tbl_drop %>% filter(category == cat_down))
+  while (nrow_drop > n_keep_min) {
     rows_to_drop <- which(tbl_drop$category == cat_down)
     v_importance <- future_map_dbl(
       rows_to_drop, remove_sample, tbl_base = tbl_drop, params = params, 
       tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1,
       f_likelihood = gcm_likelihood_no_forgetting, lo = lo, hi = hi
-      )
+    )
     tbl_drop$importance <- max(v_importance + 1)
     tbl_drop$importance[rows_to_drop] <- v_importance
     # pick best imagined data point
@@ -254,10 +259,15 @@ importance_downsampling <- function(tbl_imb, params, tbl_transfer, n_feat, d_mea
     # exclude sampled points from sampling set
     idx_chosen_point <- which.min(tbl_drop$importance)
     tbl_drop <- tbl_drop[-idx_chosen_point,]
+    nrow_drop <- nrow(tbl_drop %>% filter(category == cat_down))
+    if (nrow_drop <= n_keep_max){
+      l_tbl_drop[[nrow_drop]] <- tbl_drop
+    }
+    if (nrow_drop == 1) break
   }
   
   future::plan("default")
-  return(tbl_drop)
+  return(l_tbl_drop)
 }
 
 
@@ -295,8 +305,8 @@ simulate_responses <- function(tbl_df) {
   #' information integration structure
   #' @param tbl_df the tbl with x1 and x2 coordinates
   #' @return the same tbl with p_correct, accuracy, and responses added as columns
-
-
+  
+  
   tbl_df$x1_bd <- (tbl_df$x1 + tbl_df$x2) / 2
   tbl_df$x2_bd <- tbl_df$x1_bd
   tbl_df$d_bd <- sqrt((tbl_df$x1 - tbl_df$x1_bd) ^ 2 + (tbl_df$x2 - tbl_df$x2_bd) ^2)
@@ -316,7 +326,7 @@ add_jitter <- function(tbl_df) {
   #' information integration structure
   #' @param tbl_df the tbl with x1 and x2 coordinates
   #' @return the same tbl with p_correct, accuracy, and responses added as columns
-
+  
   tbl_df %>% dplyr::select(x1, x2, category) %>%
     mutate(
       x1 = x1 + rnorm(nrow(.), 0, .01),
@@ -352,20 +362,20 @@ mark_changes <- function(tbl_final, tbl_original) {
 
 plot_new_and_dropped <- function(tbl_all) {
   ggplot(tbl_all, aes(x1, x2, group = category)) + 
-  geom_point(aes(color = category, alpha = is_dropped)) + 
-  geom_point(aes(size = as.numeric(is_new), alpha = is_dropped), shape = 1, color = "grey70") +
-  geom_point(aes(size = as.numeric(is_dropped)), shape = 1, color = "grey70") +
-  theme_bw() +
-  scale_alpha_manual(values = c(1, 0), guide = "none") +
-  scale_size_manual(guide = "none") +
-  scale_x_continuous(expand = c(.1, .1), breaks = seq(2, 10, by = 2)) +
-  scale_y_continuous(expand = c(.1, .1), breaks = seq(2, 10, by = 2)) +
-  labs(x = expression(x[1]), y = expression(x[2])) +
-  theme(strip.background = element_rect(fill = "white")) +
-  scale_color_viridis_d(name = "Category") + 
-  geom_abline() +
-  scale_size_continuous(guide = "none") +
-  ggtitle("Up- and Downsampling")
+    geom_point(aes(color = category, alpha = is_dropped)) + 
+    geom_point(aes(size = as.numeric(is_new), alpha = is_dropped), shape = 1, color = "grey70") +
+    geom_point(aes(size = as.numeric(is_dropped)), shape = 1, color = "grey70") +
+    theme_bw() +
+    scale_alpha_manual(values = c(1, 0), guide = "none") +
+    scale_size_manual(guide = "none") +
+    scale_x_continuous(expand = c(.1, .1), breaks = seq(2, 10, by = 2)) +
+    scale_y_continuous(expand = c(.1, .1), breaks = seq(2, 10, by = 2)) +
+    labs(x = expression(x[1]), y = expression(x[2])) +
+    theme(strip.background = element_rect(fill = "white")) +
+    scale_color_viridis_d(name = "Category") + 
+    geom_abline() +
+    scale_size_continuous(guide = "none") +
+    ggtitle("Up- and Downsampling")
 }
 
 
@@ -387,13 +397,13 @@ generate_data <- function(n_reps, params, tbl_transfer, tbl_train, n_feat, d_mea
 }
 
 
-generate_and_fit <- function(n_reps, params, tbl_train_orig, tbl_train_strat, tbl_transfer, n_feat, d_measure, lo, hi) {
+generate_and_fit <- function(n_reps, params, tbl_train_orig, l_tbl_train_strat, tbl_transfer, n_feat, d_measure, lo, hi) {
   #' @description generate data given model and strategically sampled data
   #' and fit them given strategically sampled data or originally presented data
   
   # generate data given strat. sampling model
   tbl_train_strat <- tbl_train_strat  %>% mutate(trial_id = sample(1:nrow(.), nrow(.), replace = FALSE))
-  tbl_generate <- generate_data(n_reps, params, tbl_transfer, tbl_train_strat, n_feat, d_measure, lo[1:3], hi[1:3])
+  tbl_generate <- generate_data(n_reps, params, tbl_transfer, l_tbl_train_strat[[params$k]], n_feat, d_measure, lo[1:3], hi[1:3])
   
   # starting values for strat. sampling and default gcm model
   params_init <- c(c = 1, w = .5, bias = .5)
@@ -402,20 +412,27 @@ generate_and_fit <- function(n_reps, params, tbl_train_orig, tbl_train_strat, tb
   params_init_decay <- c(c = 1, w = .5, bias = .5, delta = 0.5)
   params_init_decay_tf <- pmap(list(params_init_decay, lo, hi), upper_and_lower_bounds)
   
-  results_strat <- optim(
-    params_init_tf,
-    gcm_likelihood_no_forgetting,
-    tbl_transfer = tbl_generate,
-    tbl_x = tbl_train_strat, 
-    n_feat = n_feat,
-    d_measure = d_measure,
-    lo = lo[1:3],
-    hi = hi[1:3]
-  )
+  l_params_strat <- list()
+  for (i in 1:length(l_tbl_train_strat)) {
+    results_strat <- optim(
+      params_init_tf,
+      gcm_likelihood_no_forgetting,
+      tbl_transfer = tbl_generate,
+      tbl_x = tbl_train_strat, 
+      n_feat = n_feat,
+      d_measure = d_measure,
+      lo = lo[1:3],
+      hi = hi[1:3]
+    )
+    
+    params_strat <- list()
+    params_strat[["not_tf"]] <- pmap_dbl(list(results_strat$par, lo[1:3], hi[1:3]), upper_and_lower_bounds_revert)
+    params_strat[["tf"]] <- results_strat$par
+    l_params_strat[[i]] <- params_strat
+  }
   
-  params_strat <- list()
-  params_strat[["not_tf"]] <- pmap_dbl(list(results_strat$par, lo[1:3], hi[1:3]), upper_and_lower_bounds_revert)
-  params_strat[["tf"]] <- results_strat$par
+  
+  
   
   
   results_orig <- optim(
@@ -447,7 +464,7 @@ generate_and_fit <- function(n_reps, params, tbl_train_orig, tbl_train_strat, tb
   params_decay <- list()
   params_decay[["not_tf"]] <- pmap_dbl(list(results_decay$par, lo, hi), upper_and_lower_bounds_revert)
   params_decay[["tf"]] <- results_decay$par
-
+  
   n2lls <- list()
   n2lls[["strategic"]] <- results_strat$value
   n2lls[["original"]] <- results_orig$value
@@ -458,6 +475,6 @@ generate_and_fit <- function(n_reps, params, tbl_train_orig, tbl_train_strat, tb
     params_strat = params_strat, 
     params_orig = params_orig, 
     params_decay = params_decay
-    ))
+  ))
 }
 
