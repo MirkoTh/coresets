@@ -475,10 +475,10 @@ grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance, n
 plot_grid(tbl_imb_weighted)
 plot_grid(tbl_up_and_down)
 
-c <- seq(.5, 2, length.out = 5)[1]
-w <- seq(.2, .8, length.out = 5)[1]
-bias <- seq(.2, .8, length.out = 5)[1]
-n_reps <- c(5, 10, 20)[1]
+c <- seq(.5, 2, length.out = 5)
+w <- seq(.2, .8, length.out = 5)
+bias <- seq(.2, .8, length.out = 5)
+n_reps <- c(5, 10, 20)
 k <- seq(1, 7, by = 1)
 tbl_params <- crossing(c, w, bias, n_reps, k)
 
@@ -507,7 +507,7 @@ saveRDS(l_results, file = "data/recovery-hotspots.RDS")
 future::plan("default")
 
 
-l_results <- readRDS(file = "data/recovery-hotspots.RDS")
+#l_results <- readRDS(file = "data/recovery-hotspots.RDS")
 
 
 # comparisons
@@ -641,3 +641,16 @@ ggplot(tbl_params_all, aes(gen, recover)) +
   labs(x = "Generated", y = "Recovered") + 
   theme(strip.background = element_rect(fill = "white")) + 
   scale_fill_gradient2(low = "skyblue2", high = "tomato4", name = "Correlation")
+
+
+
+
+# todo
+# save tbl_samples_ii for recognition and RT analyses
+
+
+
+
+
+
+
