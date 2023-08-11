@@ -475,11 +475,11 @@ grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance, n
 plot_grid(tbl_imb_weighted)
 plot_grid(tbl_up_and_down)
 
-c <- seq(.5, 2, length.out = 5)
-w <- seq(.2, .8, length.out = 5)
-bias <- seq(.2, .8, length.out = 5)
-n_reps <- c(5, 10, 20)
-k <- seq(1, 10, by = 1)
+c <- seq(.5, 2, length.out = 5)[1]
+w <- seq(.2, .8, length.out = 5)[1]
+bias <- seq(.2, .8, length.out = 5)[1]
+n_reps <- c(5, 10, 20)[1]
+k <- seq(1, 7, by = 1)
 tbl_params <- crossing(c, w, bias, n_reps, k)
 
 list_params <- pmap(tbl_params[, c("c", "w", "bias")], ~ list(
@@ -500,28 +500,76 @@ l_results <- future_pmap(
   d_measure = d_measure, 
   lo = lo, 
   hi = hi,
-  .progress = TRUE
+  .progress = TRUE,
+  .options = furrr_options(seed = NULL)
 )
-future::plan("default")
 saveRDS(l_results, file = "data/recovery-hotspots.RDS")
+future::plan("default")
 
 
 l_results <- readRDS(file = "data/recovery-hotspots.RDS")
 
-l_results_ll <- map(l_results, "n2lls")
 
-ll_strat <- map_dbl(l_results_ll, "strategic")
-ll_orig <- map_dbl(l_results_ll, "original")
+# comparisons
+# strategic in vs. strategic out, original out, and decay out bic -> can we recover the generating nr of examples
+# strategic gen vs. strategic out params -> can we recover the parameters
+
+
+
+# unwrap lls from different number of strategically sampled data points
+l_results_ll <- map(l_results, "n2lls")
+tbl_ll_strat <- reduce(map(1:7, ~ map_dbl(map(l_results_ll, 1), .x)), cbind) %>%
+  as.data.frame()
+colnames(tbl_ll_strat) <- str_c("k", k)
+ll_original <- map_dbl(l_results_ll, "original")
 ll_decay <- map_dbl(l_results_ll, "decay")
+
 tbl_lls <- cbind(
-  tbl_params[1:2, ], 
-  tibble(
-    bic_strat = 3*log(nrow(tbl_transfer)) + ll_strat,
-    bic_orig = 3*log(nrow(tbl_transfer)) + ll_orig,
-    bic_decay = 4*log(nrow(tbl_transfer)) + ll_decay,
-    bic_delta = bic_strat - pmin(bic_orig, bic_decay)
+  tbl_params, 
+  tbl_ll_strat, v_original, v_decay) %>%
+  mutate(
+    bic_k1 = 3*log(nrow(tbl_transfer)) + k1,
+    bic_k2 = 3*log(nrow(tbl_transfer)) + k2,
+    bic_k3 = 3*log(nrow(tbl_transfer)) + k3,
+    bic_k4 = 3*log(nrow(tbl_transfer)) + k4,
+    bic_k5 = 3*log(nrow(tbl_transfer)) + k5,
+    bic_k6 = 3*log(nrow(tbl_transfer)) + k6,
+    bic_k7 = 3*log(nrow(tbl_transfer)) + k7,
+    bic_orig = 3*log(nrow(tbl_transfer)) + ll_original,
+    bic_decay = 4*log(nrow(tbl_transfer)) + ll_decay
   )
-)
+
+
+tbl_bics_long <- tbl_lls %>%
+  rename(gen_k = k) %>%
+  dplyr::select(-c(starts_with("k"), "v_original", "v_decay")) %>%
+  pivot_longer(starts_with("bic"))
+tbl_bics_long$gen_k <- factor(tbl_bics_long$gen_k, labels = str_c("k = ", 1:7), ordered = TRUE)
+tbl_bics_long$name <- factor(tbl_bics_long$name, labels = c(str_c("k = ", 1:7), "Presented", "Decay"), ordered = TRUE)
+tbl_bics_long_agg <- tbl_bics_long %>% 
+  group_by(c, w, bias, n_reps, gen_k, name) %>%
+  summarize(value = mean(value)) %>%
+  ungroup()
+
+tbl_bics_long <- tbl_bics_long %>% 
+  group_by(gen_k) %>%
+  mutate(bic_prop = value / max(value)) %>%
+  ungroup()
+
+ggplot(tbl_bics_long, aes(gen_k, name)) + 
+  geom_tile(aes(fill = bic_prop)) +
+  geom_label(aes(label = round(bic_prop, 2))) +
+  theme_bw() +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "Generating Model", y = "Recovered Model") + 
+  theme(strip.background = element_rect(fill = "white")) + 
+  scale_fill_gradient(low = "skyblue2", high = "tomato4", name = "BIC / BIC (Worst)\nby Gen. Model")
+
+
+
+
+
 
 tbl_prop_success <- grouped_agg(tbl_lls %>% mutate(success = bic_delta < 0), n_reps, success)
 
