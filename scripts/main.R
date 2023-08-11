@@ -511,9 +511,8 @@ l_results <- readRDS(file = "data/recovery-hotspots.RDS")
 
 
 # comparisons
-# strategic in vs. strategic out, original out, and decay out bic -> can we recover the generating nr of examples
-# strategic gen vs. strategic out params -> can we recover the parameters
-
+# 1. strategic in vs. strategic out, original out, and decay out bic -> can we recover the generating nr of examples
+# 2. strategic gen vs. strategic out params -> can we recover the parameters
 
 
 # unwrap lls from different number of strategically sampled data points
@@ -602,7 +601,8 @@ ggplot(tbl_lls %>% pivot_longer(cols = c(bic_strat, bic_orig, bic_decay)), aes(n
 
 
 l_results_params <- map(l_results, "params_strat")
-tbl_params_fit <- as.data.frame(reduce(map(l_results_params, "not_tf"), rbind))
+l_results_params_gen <- map(tbl_params$k, ~ l_results_params[[.x]][[.x]])
+tbl_params_fit <- as.data.frame(reduce(map(tbl_params$k, ~ l_results_params[[1]][[.x]][["not_tf"]]), rbind))
 colnames(tbl_params_fit) <- c("c_fit", "w_fit", "bias_fit")
 
 tbl_params_all <- cbind(
