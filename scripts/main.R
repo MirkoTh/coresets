@@ -442,7 +442,7 @@ plot_grid(tbl_important_down)
 pl_points_obs <- plot_grid(tbl_imb %>% mutate(category = factor(category))) + 
   geom_abline() + ggtitle("Observed")
 pl_points_transfer <- plot_grid(tbl_transfer) + geom_abline() + ggtitle("Transfer")
-pl_points_importance <- plot_new_and_dropped(l_tbl_up_and_down[[3]] %>% rbind(l_tbl_changes_down[[3]] %>% filter(category == 0)))
+pl_points_importance <- plot_new_and_dropped(l_tbl_up_and_down[[7]] %>% rbind(l_tbl_changes_down[[7]] %>% filter(category == 0)))
 
 grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance, nrow = 1))
 

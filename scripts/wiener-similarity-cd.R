@@ -198,23 +198,30 @@ plot(sort(sims_hotspots)/(sort(sims_hotspots) + p_thx_response))
 tbl_transfer$sim_strat <- sims_strat
 tbl_transfer$sim_hotspots <- sims_hotspots
 tbl_transfer$pred_diff <- tbl_transfer$sim_strat - tbl_transfer$sim_hotspots
-ggplot(tbl_transfer, aes(x1, x2)) +
+tbl_transfer$pred_diff_abs <- abs(tbl_transfer$pred_diff)
+tbl_transfer$disc_power <- rank(desc(tbl_transfer$pred_diff_abs))
+
+tbl_transfer_disc <- tbl_transfer %>% filter(disc_power <= 10)
+
+ggplot(tbl_transfer_disc, aes(x1, x2)) +
   geom_point(aes(size = pred_diff, color = pred_diff)) + 
+  ggrepel::geom_label_repel(aes(label = round(pred_diff, 2))) +
   theme_bw() +
   scale_x_continuous(expand = c(.03, 0)) +
   scale_y_continuous(expand = c(.03, 0)) +
   labs(x = expression(x[1]), y = expression(x[2])) +
   theme(strip.background = element_rect(fill = "white")) +
   scale_size_continuous(name = "Pred. Difference", range = c(1, 5)) +
-  scale_color_gradient2(midpoint = 0, low = "skyblue2", high = "tomato4", guide = "none")
+  scale_color_gradient2(midpoint = 0, low = "skyblue2", high = "tomato4", guide = "none") +
+  coord_cartesian(xlim = c(0, 7), ylim = c(0, 7))
 
-n_reps <- 15
+n_reps <- 20
 
 tbl_rt_strat <- map_df(
   tbl_transfer$sim_strat, 
   ~ rwiener(
     n = n_reps, alpha = results_c_size$par[[1]], tau = results_c_size$par[[2]], 
-    beta = results_c_size$par[[3]], delta = results_c_size$par[[4]] + results_c_size$par[[5]] * .x
+    beta = results_c_size$par[[3]], delta = results_c_size$par[[4]] + .05*.x#results_c_size$par[[5]] * .x
   )
 ) %>% as_tibble() %>% 
   rename(rt = q) %>%
@@ -230,7 +237,7 @@ tbl_rt_hotspots <- map_df(
   tbl_transfer$sim_hotspots, 
   ~ rwiener(
     n = n_reps, alpha = results_c_size$par[[1]], tau = results_c_size$par[[2]], 
-    beta = results_c_size$par[[3]], delta = results_c_size$par[[4]] + results_c_size$par[[5]] * .x
+    beta = results_c_size$par[[3]], delta = results_c_size$par[[4]] + .05*.x#results_c_size$par[[5]] * .x
   )
 ) %>% as_tibble() %>% 
   rename(rt = q) %>%
@@ -257,16 +264,17 @@ ggplot(rbind(tbl_rt_hotspots, tbl_rt_strat), aes(rt)) +
   labs(x = "RT (s)", y = "Nr. Responses") +
   theme(strip.background = element_rect(fill = "white"))
 
-tbl_ll_diff <- tibble(n_reps = numeric(), it = numeric(), ll_diff = numeric())
+` 
+++`tbl_ll_diff <- tibble(n_reps = numeric(), it = numeric(), ll_diff = numeric())
 
 
 for (nr in c(5, 15, 30)) {
   for (i in 1:50) {
     tbl_rt_strat <- map_df(
-      tbl_transfer$sim_strat, 
+      tbl_transfer_disc$sim_strat, 
       ~ rwiener(
         n = nr, alpha = results_c_size$par[[1]], tau = results_c_size$par[[2]], 
-        beta = results_c_size$par[[3]], delta = results_c_size$par[[4]] + results_c_size$par[[5]] * .x
+        beta = results_c_size$par[[3]], delta = results_c_size$par[[4]] + 3 * .x
       )
     ) %>% as_tibble() %>% 
       rename(rt = q) %>%
@@ -274,26 +282,9 @@ for (nr in c(5, 15, 30)) {
         model = "Strat. Sampling",
         resp_recode = resp,
         resp = fct_relabel(resp, ~ c("old", "new")),
-        sim_strat = rep(tbl_transfer$sim_strat, each = nr),
-        sim_hotspot = rep(tbl_transfer$sim_hotspots, each = nr)
+        sim_strat = rep(tbl_transfer_disc$sim_strat, each = nr),
+        sim_hotspot = rep(tbl_transfer_disc$sim_hotspots, each = nr)
       )
-    
-    tbl_rt_hotspots <- map_df(
-      tbl_transfer$sim_hotspots, 
-      ~ rwiener(
-        n = nr, alpha = results_c_size$par[[1]], tau = results_c_size$par[[2]], 
-        beta = results_c_size$par[[3]], delta = results_c_size$par[[4]] + results_c_size$par[[5]] * .x
-      )
-    ) %>% as_tibble() %>% 
-      rename(rt = q) %>%
-      mutate(
-        model = "Hotspot",
-        resp_recode = resp,
-        resp = fct_relabel(resp, ~ c("old", "new")),
-        sim_strat = rep(tbl_transfer$sim_strat, each = nr),
-        sim_hotspot = rep(tbl_transfer$sim_hotspots, each = nr)
-      )
-    
     
     results_recover_strat_by_strat <- optim(
       c(1, .1, .1, 1, .05), 
@@ -313,9 +304,12 @@ for (nr in c(5, 15, 30)) {
         ll_diff = results_recover_strat_by_strat$value - results_recover_strat_by_hotspot$value
       )
     )
+    saveRDS(tbl_ll_diff, file = "data/wiener-strat-sampling-recovery-disc-power-top10.RDS")
+    
   }
 }
 
+tbl_ll_diff <- readRDS("data/wiener-strat-sampling-recovery-disc-power-top10.RDS")
 
 
 ggplot(tbl_ll_diff, aes(ll_diff)) +
@@ -332,3 +326,8 @@ ggplot(tbl_ll_diff, aes(ll_diff)) +
 
 # todos
 # use a mixture from training set (actually old responses) and transfer set (new responses)
+# generate this mixture using data points from the transfer set, on which predictions from the two models differ a lot
+
+
+
+
