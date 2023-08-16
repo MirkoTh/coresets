@@ -479,3 +479,8 @@ generate_and_fit <- function(n_reps, params, k, tbl_train_orig, l_tbl_train_stra
   ))
 }
 
+
+save_my_pdf_and_tiff <- function(pl, path_fl, w, h) {
+  save_my_pdf(pl, str_c(path_fl, ".pdf"), w, h)
+  save_my_tiff(pl, str_c(path_fl, ".tiff"), w, h)
+}
