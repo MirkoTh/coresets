@@ -148,7 +148,8 @@ tbl_imb <- simulate_responses(tbl_imb)
 tbl_imb_weighted <- simulate_responses(tbl_imb_weighted)
 tbl_transfer <- simulate_responses(tbl_transfer)
 
-
+saveRDS(tbl_transfer, file = "data/transfer-data.RDS")
+saveRDS(tbl_imb, file = "data/hotspot-data.RDS")
 
 # The Effect of Category Bias ---------------------------------------------
 
