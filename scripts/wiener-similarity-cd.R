@@ -172,7 +172,7 @@ sims_hotspots <- pmap_dbl(
   ~ sum(pmap_dbl(
     tbl_hotspots[, c("x1", "x2")], 
     f_similarity, 
-    c(params_fin[[2]], 1 - params_fin[[2]]), params_fin[[3]], tibble(x1 = .x, x2 = .y), 1
+    c(params_fin[[2]], 1 - params_fin[[2]]), params_fin[[1]], tibble(x1 = .x, x2 = .y), 1
   ))
 )
 
@@ -181,7 +181,7 @@ sims_strat <- pmap_dbl(
   ~ sum(pmap_dbl(
     l_tbl_up_and_down[[7]][, c("x1", "x2")], 
     f_similarity, 
-    c(params_fin[[2]], 1 - params_fin[[2]]), params_fin[[3]], tibble(x1 = .x, x2 = .y), 1
+    c(params_fin[[2]], 1 - params_fin[[2]]), params_fin[[1]], tibble(x1 = .x, x2 = .y), 1
   ))
 )
 
@@ -216,6 +216,8 @@ ggplot(tbl_transfer_disc, aes(x1, x2)) +
   coord_cartesian(xlim = c(0, 7), ylim = c(0, 7))
 
 n_reps <- 20
+
+saveRDS(tbl_transfer, file = "data/transfer-rt-data.RDS")
 
 tbl_rt_strat <- map_df(
   tbl_transfer$sim_strat, 
@@ -264,17 +266,16 @@ ggplot(rbind(tbl_rt_hotspots, tbl_rt_strat), aes(rt)) +
   labs(x = "RT (s)", y = "Nr. Responses") +
   theme(strip.background = element_rect(fill = "white"))
 
-` 
-++`tbl_ll_diff <- tibble(n_reps = numeric(), it = numeric(), ll_diff = numeric())
+tbl_ll_diff <- tibble(n_reps = numeric(), it = numeric(), ll_diff = numeric())
 
 
-for (nr in c(5, 15, 30)) {
+for (nr in c(20, 30, 40)) {
   for (i in 1:50) {
     tbl_rt_strat <- map_df(
       tbl_transfer_disc$sim_strat, 
       ~ rwiener(
         n = nr, alpha = results_c_size$par[[1]], tau = results_c_size$par[[2]], 
-        beta = results_c_size$par[[3]], delta = results_c_size$par[[4]] + 3 * .x
+        beta = results_c_size$par[[3]], delta = 2 + 1 * .x # results_c_size$par[[4]]
       )
     ) %>% as_tibble() %>% 
       rename(rt = q) %>%
