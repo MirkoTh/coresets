@@ -1,14 +1,16 @@
 rm(list = ls())
 
-dirs_home_grown <- c("utils/utils.R")
-walk(dirs_home_grown, source)
-
 
 library(tidyverse)
 library(RWiener)
 library(rutils)
 library(grid)
 library(gridExtra)
+
+
+dirs_home_grown <- c("utils/utils.R")
+walk(dirs_home_grown, source)
+
 
 tbl_transfer <- readRDS("data/transfer-rt-data.RDS")
 tbl_transfer$label <- "new"
@@ -45,13 +47,24 @@ sims_strat <- pmap_dbl(
   ))
 )
 
-cor(sims_hotspot, sims_strat)
+cor(scale(sims_hotspot)[, 1], scale(sims_strat)[, 1])
+plot(scale(sims_hotspot)[, 1], scale(sims_strat)[, 1])
+hist(sims_strat)
+hist(sims_hotspot)
 
-
-p_gamma <- .25
+p_gamma <- 1
 p_thx_response <- .2
-sims_hotspot_resp_prop <- sims_hotspot^p_gamma / max(sims_hotspot^p_gamma)
-sims_strat_resp_prop <- sims_strat^p_gamma / max(sims_strat^p_gamma)
+
+# the two similarities are on different scales because of different number of exemplars in memory
+# do not bother about the absolute values of the two similarities 
+# because they are inserted as regressors onto drift rate
+# by scaling both similarities, we can compare the coefficients how strong they affect v
+
+sims_hotspot_resp_prop <- scale(sims_hotspot^p_gamma)[, 1] #/ max(sims_hotspot^p_gamma)
+sims_strat_resp_prop <- scale(sims_strat^p_gamma)[, 1] #/ max(sims_strat^p_gamma)
+
+cor(sims_hotspot_resp_prop, sims_strat_resp_prop)
+plot(sims_hotspot_resp_prop, sims_strat_resp_prop)
 
 tbl_test$sim_hotspots <- sims_hotspot
 tbl_test$sim_hotspots_resp_prop <- sims_hotspot_resp_prop
@@ -64,6 +77,10 @@ ggplot(tbl_test %>% pivot_longer(c(sim_hotspots, sim_strat)), aes(value)) +
   facet_grid(name ~ label, scales = "free")
 
 
+ggplot(tbl_test %>% pivot_longer(c(sim_hotspots_resp_prop, sim_strat_resp_prop)), aes(value)) +
+  geom_histogram(fill = "white", color = "red") +
+  facet_grid(name ~ label, scales = "free")
+
 
 alpha <- 1.23
 beta <- .55
@@ -71,7 +88,7 @@ delta_ic <- 2#.93
 delta_slope <- -.02
 tau <- .27
 
-v_delta_slopes <- seq(-1, 1, by = .2)
+v_delta_slopes <- seq(-3, 3, by = .6)
 
 l_out <- list()
 n_reps <- 100
@@ -79,7 +96,7 @@ n_reps <- 100
 for (i in 1:length(v_delta_slopes)) {
   
   tbl_rt_strat <- map_df(
-    scale(tbl_test$sim_strat, center = TRUE, scale = FALSE), 
+    scale(tbl_test$sim_strat_resp_prop, center = TRUE, scale = FALSE), 
     ~ rwiener(
       n = n_reps, alpha = alpha, tau = tau, beta = beta,
       delta = delta_ic + v_delta_slopes[[i]] * .x #results_c_size$par[[5]] * .x
@@ -90,16 +107,16 @@ for (i in 1:length(v_delta_slopes)) {
       model = "Strat. Sampling",
       resp_recode = resp,
       resp = fct_relabel(resp, ~ c("old", "new")),
-      sim_strat = rep(tbl_test$sim_strat, each = n_reps),
-      sim_hotspots = rep(tbl_test$sim_hotspots, each = n_reps)
+      sim_strat = rep(tbl_test$sim_strat_resp_prop, each = n_reps),
+      sim_hotspots = rep(tbl_test$sim_hotspots_resp_prop, each = n_reps)
     )
   tbl_rt_strat$item_id <- rep(1:nrow(tbl_test), each = n_reps)
   
   tbl_rt_hotspots <- map_df(
-    scale(tbl_test$sim_hotspots, center = TRUE, scale = FALSE), 
+    scale(tbl_test$sim_hotspots_resp_prop, center = TRUE, scale = FALSE), 
     ~ rwiener(
       n = n_reps, alpha = alpha, tau = tau, beta = beta,
-      delta = delta_ic + a[[i]] * .x #results_c_size$par[[5]] * .x
+      delta = delta_ic + v_delta_slopes[[i]] * .x #results_c_size$par[[5]] * .x
     )
   ) %>% as_tibble() %>% 
     rename(rt = q) %>%
@@ -107,12 +124,13 @@ for (i in 1:length(v_delta_slopes)) {
       model = "Hotspot",
       resp_recode = resp,
       resp = fct_relabel(resp, ~ c("old", "new")),
-      sim_strat = rep(tbl_test$sim_strat, each = n_reps),
-      sim_hotspots = rep(tbl_test$sim_hotspots, each = n_reps)
+      sim_strat = rep(tbl_test$sim_strat_resp_prop, each = n_reps),
+      sim_hotspots = rep(tbl_test$sim_hotspots_resp_prop, each = n_reps)
     )
   tbl_rt_hotspots$item_id <- rep(1:nrow(tbl_test), each = n_reps)
   
-  tbl_both <- tbl_rt_strat %>% dplyr::select(sim_strat, rt_strat = rt, resp_strat = resp, item_id) %>%
+  tbl_both <- tbl_rt_strat %>% 
+    dplyr::select(sim_strat, rt_strat = rt, resp_strat = resp, item_id) %>%
     cbind(
       tbl_rt_hotspots %>% 
         dplyr::select(sim_hotspots, rt_hotspot = rt, resp_hotspot = resp)
@@ -122,7 +140,11 @@ for (i in 1:length(v_delta_slopes)) {
       rt_diff = rt_strat - rt_hotspot
     )
   
-  tbl_both_agg <- grouped_agg(tbl_both, c(item_id, sim_strat, sim_hotspots), c(resp_same, rt_diff))
+  tbl_both_agg <- grouped_agg(
+    tbl_both, 
+    c(item_id, sim_strat, sim_hotspots), 
+    c(resp_same, rt_diff, rt_strat)
+  )
   
   tbl_rt_both <- rbind(tbl_rt_strat, tbl_rt_hotspots)
   
@@ -195,6 +217,8 @@ ggplot(tbl_abs %>% pivot_longer(cols = c(prop_old, rt_old)), aes(delta_slope, va
 
 
 ggplot(tbl_both_agg, aes(sim_strat - sim_hotspots, mean_rt_diff)) +
+  geom_line()
+ggplot(tbl_both_agg, aes(sim_strat, mean_rt_strat)) +
   geom_line()
 
 

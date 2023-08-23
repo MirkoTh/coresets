@@ -55,8 +55,9 @@ tbl_cr <- tbl_raw %>% filter(taskType == "Recall" & subj != 3)
 tbl_cd$id_rand <- sample(1:nrow(tbl_cd), nrow(tbl_cd), replace = FALSE)
 tbl_cd$resp_recode <- map_chr(tbl_cd$resp + 1, ~ c("upper", "lower")[.x])
 
-tbl_cd %>% group_by(c_size_abs = abs(c_size)) %>% summarize(acc = mean(resp), m_rt = mean(rt), n = n()) %>%
-  ggplot(aes(c_size_abs, acc)) +
+tbl_cd %>% group_by(c_size_abs = abs(c_size)) %>% 
+  summarize(p_new = mean(resp), m_rt = mean(rt), n = n()) %>%
+  ggplot(aes(c_size_abs, p_new)) +
   geom_line() +
   geom_point(aes(size = n))
 
@@ -156,10 +157,13 @@ results_c_size <- optim(c(1, .1, .1, 1, .05), wiener_reg_delta_log, my_tbl = tbl
 
 
 # now use these parameters to predict rt data and choices for the same stimuli used in the two-dimensional categorization task
-rwiener(1, results_c_size$par[[1]], results_c_size$par[[2]], results_c_size$par[[3]], results_c_size$par[[4]] + results_c_size$par[[5]] * c(1, 2))
 l_tbl_up_and_down <- readRDS("data/l_tbl_up_and_down.RDS")
 tbl_hotspots <- readRDS("data/hotspot-data.RDS")
-tbl_transfer <- readRDS("data/transfer-data.RDS")
+tbl_transfer <- readRDS("data/transfer-rt-data.RDS")
+tbl_test <- rbind(
+  tbl_hotspots %>% dplyr::select(x1, x2, category, trial_id) %>% mutate(label = "old"),
+  tbl_transfer  %>% dplyr::select(x1, x2, category, trial_id) %>% mutate(label = "new")
+)
 
 params_fin <- c(1.23, .5, .5)
 lo <- c(0, .01, .0001, 1e-10)
@@ -168,42 +172,45 @@ hi <- c(10, .99, .9999, .999999999)
 params <- pmap(list(params_fin[1:3], lo[1:3], hi[1:3]), upper_and_lower_bounds)
 
 sims_hotspots <- pmap_dbl(
-  tbl_transfer[, c("x1", "x2")], 
+  tbl_test[, c("x1", "x2")], 
   ~ sum(pmap_dbl(
     tbl_hotspots[, c("x1", "x2")], 
     f_similarity, 
-    c(params_fin[[2]], 1 - params_fin[[2]]), params_fin[[1]], tibble(x1 = .x, x2 = .y), 1
+    c(params_fin[[2]], 1 - params_fin[[2]]), 15, tibble(x1 = .x, x2 = .y), 1
   ))
 )
 
 sims_strat <- pmap_dbl(
-  tbl_transfer[, c("x1", "x2")], 
+  tbl_test[, c("x1", "x2")], 
   ~ sum(pmap_dbl(
-    l_tbl_up_and_down[[7]][, c("x1", "x2")], 
+    l_tbl_up_and_down[[2]][, c("x1", "x2")], 
     f_similarity, 
-    c(params_fin[[2]], 1 - params_fin[[2]]), params_fin[[1]], tibble(x1 = .x, x2 = .y), 1
+    c(params_fin[[2]], 1 - params_fin[[2]]), 15, tibble(x1 = .x, x2 = .y), 1
   ))
 )
+cor(sims_strat, sims_hotspots)
 
-p_gamma <- 3
+p_gamma <- .2
 p_thx_response <- .2
-sims_strat <- sims_strat^p_gamma / max(sims_strat^p_gamma)
-sims_hotspots <- sims_hotspots^p_gamma / max(sims_hotspots^p_gamma)
+sims_strat_z <- scale(sims_strat^p_gamma)[, 1] #/ max(sims_strat^p_gamma)
+sims_hotspots_z <- scale(sims_hotspots^p_gamma)[, 1] # / max(sims_hotspots^p_gamma)
+hist(sims_strat_z)
 
+cor(sims_strat_z, sims_hotspots_z)
 
 plot(sort(sims_strat)/(sort(sims_strat) + p_thx_response))
 plot(sort(sims_hotspots)/(sort(sims_hotspots) + p_thx_response))
 
 
-tbl_transfer$sim_strat <- sims_strat
-tbl_transfer$sim_hotspots <- sims_hotspots
-tbl_transfer$pred_diff <- tbl_transfer$sim_strat - tbl_transfer$sim_hotspots
-tbl_transfer$pred_diff_abs <- abs(tbl_transfer$pred_diff)
-tbl_transfer$disc_power <- rank(desc(tbl_transfer$pred_diff_abs))
+tbl_test$sim_strat_z <- sims_strat_z
+tbl_test$sim_hotspots_z <- sims_hotspots_z
+tbl_test$pred_diff <- tbl_test$sim_strat_z - tbl_test$sim_hotspots_z
+tbl_test$pred_diff_abs <- abs(tbl_test$pred_diff)
+tbl_test$disc_power <- rank(desc(tbl_test$pred_diff_abs))
 
-tbl_transfer_disc <- tbl_transfer %>% filter(disc_power <= 10)
+tbl_test_disc <- tbl_test %>% filter(disc_power <= 10)
 
-ggplot(tbl_transfer_disc, aes(x1, x2)) +
+ggplot(tbl_test_disc, aes(x1, x2)) +
   geom_point(aes(size = pred_diff, color = pred_diff)) + 
   ggrepel::geom_label_repel(aes(label = round(pred_diff, 2))) +
   theme_bw() +
@@ -217,13 +224,13 @@ ggplot(tbl_transfer_disc, aes(x1, x2)) +
 
 n_reps <- 20
 
-saveRDS(tbl_transfer, file = "data/transfer-rt-data.RDS")
+#saveRDS(tbl_transfer, file = "data/transfer-rt-data.RDS")
 
 tbl_rt_strat <- map_df(
-  tbl_transfer$sim_strat, 
+  tbl_test$sim_strat_z, 
   ~ rwiener(
     n = n_reps, alpha = results_c_size$par[[1]], tau = results_c_size$par[[2]], 
-    beta = results_c_size$par[[3]], delta = results_c_size$par[[4]] + .05*.x#results_c_size$par[[5]] * .x
+    beta = results_c_size$par[[3]], delta = results_c_size$par[[4]] + 2 *.x#results_c_size$par[[5]] * .x
   )
 ) %>% as_tibble() %>% 
   rename(rt = q) %>%
@@ -231,15 +238,15 @@ tbl_rt_strat <- map_df(
     model = "Strat. Sampling",
     resp_recode = resp,
     resp = fct_relabel(resp, ~ c("old", "new")),
-    sim_strat = rep(tbl_transfer$sim_strat, each = n_reps),
-    sim_hotspot = rep(tbl_transfer$sim_hotspots, each = n_reps)
+    sim_strat_z = rep(tbl_test$sim_strat_z, each = n_reps),
+    sim_hotspot_z = rep(tbl_test$sim_hotspots_z, each = n_reps)
   )
 
 tbl_rt_hotspots <- map_df(
-  tbl_transfer$sim_hotspots, 
+  tbl_test$sim_hotspots_z, 
   ~ rwiener(
     n = n_reps, alpha = results_c_size$par[[1]], tau = results_c_size$par[[2]], 
-    beta = results_c_size$par[[3]], delta = results_c_size$par[[4]] + .05*.x#results_c_size$par[[5]] * .x
+    beta = results_c_size$par[[3]], delta = results_c_size$par[[4]] + 2 *.x#results_c_size$par[[5]] * .x
   )
 ) %>% as_tibble() %>% 
   rename(rt = q) %>%
@@ -247,8 +254,8 @@ tbl_rt_hotspots <- map_df(
     model = "Hotspot",
     resp_recode = resp,
     resp = fct_relabel(resp, ~ c("old", "new")),
-    sim_strat = rep(tbl_transfer$sim_strat, each = n_reps),
-    sim_hotspot = rep(tbl_transfer$sim_hotspots, each = n_reps)
+    sim_strat_z = rep(tbl_test$sim_strat_z, each = n_reps),
+    sim_hotspot_z = rep(tbl_test$sim_hotspots_z, each = n_reps)
   )
 
 tbl_rt_both <- rbind(tbl_rt_strat, tbl_rt_hotspots)
@@ -268,14 +275,20 @@ ggplot(rbind(tbl_rt_hotspots, tbl_rt_strat), aes(rt)) +
 
 tbl_ll_diff <- tibble(n_reps = numeric(), it = numeric(), ll_diff = numeric())
 
+# map2 over sim_strat_z and sim_hotspot_z at the same time
+# assume a larger coefficient on sim_hotspot_z than on sim_strat_z
 
-for (nr in c(20, 30, 40)) {
-  for (i in 1:50) {
-    tbl_rt_strat <- map_df(
-      tbl_transfer_disc$sim_strat, 
+# recover by model just assuming sim_hotspot_z as a covariate
+# adapt wiener_ll function to handle to covariates
+
+for (nr in c(1, 2)) {
+  for (i in 1:10) {
+    tbl_rt_strat <- map2_df(
+      tbl_test$sim_hotspot_z, tbl_test$sim_strat_z, 
       ~ rwiener(
-        n = nr, alpha = results_c_size$par[[1]], tau = results_c_size$par[[2]], 
-        beta = results_c_size$par[[3]], delta = 2 + 1 * .x # results_c_size$par[[4]]
+        n = nr, alpha = results_c_size$par[[1]], 
+        tau = results_c_size$par[[2]], beta = results_c_size$par[[3]], 
+        delta = results_c_size$par[[4]] + 2 * .x  + .5 * .y# results_c_size$par[[4]]
       )
     ) %>% as_tibble() %>% 
       rename(rt = q) %>%
@@ -283,19 +296,19 @@ for (nr in c(20, 30, 40)) {
         model = "Strat. Sampling",
         resp_recode = resp,
         resp = fct_relabel(resp, ~ c("old", "new")),
-        sim_strat = rep(tbl_transfer_disc$sim_strat, each = nr),
-        sim_hotspot = rep(tbl_transfer_disc$sim_hotspots, each = nr)
+        sim_strat_z = rep(tbl_test$sim_strat_z, each = nr),
+        sim_hotspot_z = rep(tbl_test$sim_hotspots_z, each = nr)
       )
     
     results_recover_strat_by_strat <- optim(
       c(1, .1, .1, 1, .05), 
       wiener_reg_delta_log, 
-      my_tbl = tbl_rt_strat %>% mutate(pred_lr = sim_strat)
+      my_tbl = tbl_rt_strat %>% mutate(pred_lr = sim_strat_z)
     )
     results_recover_strat_by_hotspot <- optim(
       c(1, .1, .1, 1, .05), 
       wiener_reg_delta_log, 
-      my_tbl = tbl_rt_strat %>% mutate(pred_lr = sim_hotspot)
+      my_tbl = tbl_rt_strat %>% mutate(pred_lr = sim_hotspot_z)
     )
     tbl_ll_diff <- rbind(
       tbl_ll_diff,
@@ -322,7 +335,7 @@ ggplot(tbl_ll_diff, aes(ll_diff)) +
   scale_y_continuous(expand = c(.1, 0)) +
   labs(x = "LL Strat. Sampling - LL Hotspots", y = "Nr. Samples", title = "Strat. Sampling Generating") +
   theme(strip.background = element_rect(fill = "white"))
-  
+
 
 
 # todos
