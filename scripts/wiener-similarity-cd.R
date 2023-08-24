@@ -122,7 +122,7 @@ tbl_cd %>% group_by(c_size_abs = abs(c_size)) %>%
 # 
 
 
-wiener_reg_delta_log <- function(x, my_tbl) {
+wiener_reg1_delta_log <- function(x, my_tbl) {
   #' @description Wiener LL with linear regression on drift rate
   
   alpha <- x[[1]]
@@ -143,6 +143,30 @@ wiener_reg_delta_log <- function(x, my_tbl) {
   return(neg2loglik)
 }
 
+wiener_reg2_delta_log <- function(x, my_tbl) {
+  #' @description Wiener LL with linear regression on drift rate
+  
+  alpha <- x[[1]]
+  tau <- x[[2]]
+  beta <- x[[3]]
+  delta_ic <- x[[4]]
+  delta_slope1 <- x[[5]]
+  delta_slope2 <- x[[6]]
+  
+  lik <- pmap_dbl(
+    my_tbl[, c("rt", "resp_recode", "pred_lr1", "pred_lr2")], 
+    ~ dwiener(
+      q = ..1, alpha = alpha, tau = tau, beta = beta, 
+      delta = delta_ic + delta_slope1 * ..3 + delta_slope2 * ..4,
+      resp = ..2
+    )
+  )
+  
+  neg2loglik <- -2*sum(log(pmax(lik,1e-10)))
+  
+  return(neg2loglik)
+}
+
 
 tbl_cd %>% filter(resp == 1 & c_size > 0) %>%
   mutate(c_size_cut = cut(c_size, 7)) %>%
@@ -153,7 +177,7 @@ tbl_cd %>% filter(resp == 1 & c_size > 0) %>%
   geom_point(aes(size = n))
 
 
-results_c_size <- optim(c(1, .1, .1, 1, .05), wiener_reg_delta_log, my_tbl = tbl_cd[1:1000, ] %>% mutate(pred_lr = c_size_abs))
+results_c_size <- optim(c(1, .1, .1, 1, .05), wiener_reg1_delta_log, my_tbl = tbl_cd[1:1000, ] %>% mutate(pred_lr = c_size_abs))
 
 
 # now use these parameters to predict rt data and choices for the same stimuli used in the two-dimensional categorization task
@@ -218,7 +242,7 @@ ggplot(tbl_test_disc, aes(x1, x2)) +
   scale_y_continuous(expand = c(.03, 0)) +
   labs(x = expression(x[1]), y = expression(x[2])) +
   theme(strip.background = element_rect(fill = "white")) +
-  scale_size_continuous(name = "Pred. Difference", range = c(1, 5)) +
+  scale_size_continuous(name = "Pred. Difference", range = c(1, 5), guide = "none") +
   scale_color_gradient2(midpoint = 0, low = "skyblue2", high = "tomato4", guide = "none") +
   coord_cartesian(xlim = c(0, 7), ylim = c(0, 7))
 
@@ -258,14 +282,17 @@ tbl_rt_hotspots <- map_df(
     sim_hotspot_z = rep(tbl_test$sim_hotspots_z, each = n_reps)
   )
 
+tbl_test$item_id <- 1:nrow(tbl_test)
+tbl_rt_hotspots$item_id <- rep(tbl_test$item_id, each = n_reps)
+tbl_rt_strat$item_id <- rep(tbl_test$item_id, each = n_reps)
 tbl_rt_both <- rbind(tbl_rt_strat, tbl_rt_hotspots)
 
 tbl_acc <- grouped_agg(tbl_rt_both %>% mutate(p_old = resp == "old"), c(model, resp), c(rt)) %>%
   mutate(prop_resp = n / sum(n))
 
-ggplot(rbind(tbl_rt_hotspots, tbl_rt_strat), aes(rt)) +
+ggplot(tbl_rt_both, aes(rt)) +
   geom_histogram(fill = "skyblue2", color = "black") +
-  geom_label(data = tbl_acc, aes(x = 1.5, y = 40, label = str_c("Prop. = ", round(prop_resp, 3)))) +
+  geom_label(data = tbl_acc, aes(x = 1.5, y = n/10, label = str_c("Prop. = ", round(prop_resp, 3)))) +
   facet_grid(model ~ resp) + 
   theme_bw() +
   scale_x_continuous(expand = c(0, 0)) +
@@ -273,18 +300,51 @@ ggplot(rbind(tbl_rt_hotspots, tbl_rt_strat), aes(rt)) +
   labs(x = "RT (s)", y = "Nr. Responses") +
   theme(strip.background = element_rect(fill = "white"))
 
-tbl_ll_diff <- tibble(n_reps = numeric(), it = numeric(), ll_diff = numeric())
+
+
+tbl_test$label <- factor(tbl_test$label, labels = c(1, 0))
+levels(tbl_rt_hotspots$resp) <- c(0, 1)
+levels(tbl_rt_strat$resp) <- c(0, 1)
+
+tbl_hotspots_agg <- tbl_rt_hotspots %>% 
+  group_by(item_id) %>%
+  summarize(p_new = mean(as.numeric(as.character(resp))))
+tbl_strat_agg <- tbl_rt_strat %>%
+  group_by(item_id) %>%
+  summarize(p_new = mean(as.numeric(as.character(resp))))
+
+hist(tbl_strat_agg$p_new)
+hist(tbl_hotspots_agg$p_new)
+
+plot(tbl_strat_agg$p_new, tbl_hotspots_agg$p_new)
+
+tbl_test$p_new_hotspots <- tbl_hotspots_agg$p_new
+tbl_test$p_new_strat <- tbl_strat_agg$p_new
+
+# okish for recovery
+tbl_test %>% group_by(label) %>%
+  summarize(
+    p_new_hotspots = mean(p_new_hotspots),
+    p_new_strat = mean(p_new_strat)
+  )
 
 # map2 over sim_strat_z and sim_hotspot_z at the same time
 # assume a larger coefficient on sim_hotspot_z than on sim_strat_z
 
 # recover by model just assuming sim_hotspot_z as a covariate
 # adapt wiener_ll function to handle to covariates
+tbl_ll_diff <- tibble(
+  n_reps = numeric(), it = numeric(), 
+  ll_diff = numeric(),
+  ll_bivar = numeric(),
+  ll_hotspot = numeric(),
+  ll_strat = numeric()
+)
 
 for (nr in c(1, 2)) {
   for (i in 1:10) {
     tbl_rt_strat <- map2_df(
-      tbl_test$sim_hotspot_z, tbl_test$sim_strat_z, 
+      tbl_test$sim_hotspots_z, tbl_test$sim_strat_z, 
       ~ rwiener(
         n = nr, alpha = results_c_size$par[[1]], 
         tau = results_c_size$par[[2]], beta = results_c_size$par[[3]], 
@@ -300,22 +360,29 @@ for (nr in c(1, 2)) {
         sim_hotspot_z = rep(tbl_test$sim_hotspots_z, each = nr)
       )
     
-    results_recover_strat_by_strat <- optim(
-      c(1, .1, .1, 1, .05), 
-      wiener_reg_delta_log, 
-      my_tbl = tbl_rt_strat %>% mutate(pred_lr = sim_strat_z)
+    results_recover_bivar_by_bivar <- optim(
+      c(1, .1, .1, 1, 1, 1), 
+      wiener_reg2_delta_log, 
+      my_tbl = tbl_rt_strat %>% mutate(pred_lr1 = sim_hotspot_z, pred_lr2 = sim_strat_z)
     )
-    results_recover_strat_by_hotspot <- optim(
-      c(1, .1, .1, 1, .05), 
-      wiener_reg_delta_log, 
+    results_recover_bivar_by_hotspot <- optim(
+      c(1, .1, .1, 1, 1), 
+      wiener_reg1_delta_log, 
       my_tbl = tbl_rt_strat %>% mutate(pred_lr = sim_hotspot_z)
+    )
+    results_recover_bivar_by_strat <- optim(
+      c(1, .1, .1, 1, 1), 
+      wiener_reg1_delta_log, 
+      my_tbl = tbl_rt_strat %>% mutate(pred_lr = sim_strat_z)
     )
     tbl_ll_diff <- rbind(
       tbl_ll_diff,
       tibble(
         n_reps = nr,
         it = i,
-        ll_diff = results_recover_strat_by_strat$value - results_recover_strat_by_hotspot$value
+        ll_bivar = results_recover_bivar_by_bivar$value,
+        ll_hotspot = results_recover_bivar_by_hotspot$value,
+        ll_strat = results_recover_bivar_by_strat$value
       )
     )
     saveRDS(tbl_ll_diff, file = "data/wiener-strat-sampling-recovery-disc-power-top10.RDS")
