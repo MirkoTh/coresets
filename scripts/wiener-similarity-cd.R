@@ -385,12 +385,36 @@ for (nr in c(1, 2)) {
         ll_strat = results_recover_bivar_by_strat$value
       )
     )
-    saveRDS(tbl_ll_diff, file = "data/wiener-strat-sampling-recovery-disc-power-top10.RDS")
+    saveRDS(tbl_ll_diff, file = "data/wiener-strat-sampling-recovery.RDS")
     
   }
 }
 
-tbl_ll_diff <- readRDS("data/wiener-strat-sampling-recovery-disc-power-top10.RDS")
+tbl_ll_diff <- readRDS("data/wiener-strat-sampling-recovery.RDS")
+
+tbl_ll_diff_long <- tbl_ll_diff %>% 
+  mutate(
+    n_data = rep(c(330, 660), each = 10),
+    bic_bivar = 6*log(n_data) + ll_bivar,
+    bic_hotspot = 5*log(n_data) + ll_hotspot,
+    bic_strat = 5*log(n_data) + ll_strat,
+    is_recovered = bic_bivar == pmin(bic_bivar, bic_hotspot, bic_strat),
+  ) %>%
+  pivot_longer(c(bic_bivar, bic_hotspot, bic_strat))
+
+tbl_recovered_agg <- grouped_agg(tbl_ll_diff_long, c(name, n_reps), is_recovered)
+
+ggplot(tbl_ll_diff_long, aes(value, group = name)) +
+  geom_histogram() +
+  geom_label(
+    data = tbl_recovered_agg, 
+    aes(x = 100, y = 2, label = str_c("p (recov.) = ", round(mean_is_recovered, 2))
+    )
+  ) +
+  facet_grid(n_reps ~ name)
+
+
+
 
 
 ggplot(tbl_ll_diff, aes(ll_diff)) +
