@@ -632,9 +632,10 @@ ll_recognition_2_slopes <- function(x, tbl_hotspots, tbl_strat, tbl_test) {
   #' parameters of representation model and decision model
   #' assuming two similarities affect drift rate
   #' @return the value of the -2 * LL
-  #' 
+  #'
+  x <- pmap(list(x, lo2, hi2), upper_and_lower_bounds_revert)
   l_sims <- sims_hotspot_strat(
-    x$w, x$sens, x$gamma, tbl_hotspots, tbl_strat, tbl_test
+    x[["w"]], x[["sens"]], x[["gamma"]], tbl_hotspots, tbl_strat, tbl_test
   )
   tbl_test$pred_lr1 <- l_sims$sims_hotspots_z
   tbl_test$pred_lr2 <- l_sims$sims_strat_z
@@ -649,8 +650,9 @@ ll_recognition_1_slope <- function(x, tbl_hotspots, tbl_strat, tbl_test, sim_whi
   #' assuming only one similarity affects drift rate
   #' @return the value of the -2 * LL
   #'   
+  x <- pmap(list(x, lo1, hi1), upper_and_lower_bounds_revert)
   l_sims <- sims_hotspot_strat(
-    x$w, x$sens, x$gamma, tbl_hotspots, tbl_strat, tbl_test
+    x[["w"]], x[["sens"]], x[["gamma"]], tbl_hotspots, tbl_strat, tbl_test
   )
   tbl_test$pred_lr <- l_sims[[sim_which]]
   neg2ll <- wiener_reg1_delta_log(x, tbl_test)
