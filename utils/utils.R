@@ -553,3 +553,54 @@ gen_wiener_2_slopes <- function(
   
   return(tbl_rt_gen)
 }
+
+wiener_reg1_delta_log <- function(x, my_tbl) {
+  #' @description Wiener LL with linear regression on drift rate
+  #' only regressing drift rate on one similarity
+  #' @return the -2 * sum of the LL
+
+  
+  alpha <- x[["alpha"]]
+  tau <- x[["tau"]]
+  beta <- x[["beta"]]
+  delta_ic <- x[["delta_ic"]]
+  delta_slope <- x[["delta_sl1"]]
+  
+  lik <- pmap_dbl(
+    my_tbl[, c("rt", "resp_recode", "pred_lr")], ~ dwiener(
+      q = ..1, alpha = alpha, tau = tau, beta = beta, 
+      delta = delta_ic + delta_slope * ..3, resp = ..2
+    )
+  )
+  
+  neg2loglik <- -2*sum(log(pmax(lik,1e-10)))
+  
+  return(neg2loglik)
+}
+
+wiener_reg2_delta_log <- function(x, my_tbl) {
+  #' @description Wiener LL with linear regression on drift rate
+  #' regressing drift rate on two similarities
+  #' @return the -2 * sum of the LL
+  
+  alpha <- x[["alpha"]]
+  tau <- x[["tau"]]
+  beta <- x[["beta"]]
+  delta_ic <- x[["delta_ic"]]
+  delta_slope1 <- x[["delta_sl1"]]
+  delta_slope2 <- x[["delta_sl2"]]
+  
+  
+  lik <- pmap_dbl(
+    my_tbl[, c("rt", "resp_recode", "pred_lr1", "pred_lr2")], 
+    ~ dwiener(
+      q = ..1, alpha = alpha, tau = tau, beta = beta, 
+      delta = delta_ic + delta_slope1 * ..3 + delta_slope2 * ..4,
+      resp = ..2
+    )
+  )
+  
+  neg2loglik <- -2*sum(log(pmax(lik,1e-10)))
+  
+  return(neg2loglik)
+}
