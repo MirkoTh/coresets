@@ -526,3 +526,30 @@ sims_hotspot_strat <- function(w, sens, gamma, tbl_hotspots, tbl_strat, tbl_test
   ))
   
 }
+
+
+gen_wiener_2_slopes <- function(
+    sim_hs, sim_strat, alpha, beta, tau, delta_ic, delta_sl1, delta_sl2, n_reps
+) {
+  #' @description generate recognition data with wiener likelihood 
+  #' given similarities to presented and imagined data
+  #' both similarities affect the drift rate according to 
+  #' delta_sl1 and delta_sl2, respectively
+  #' @return a tibble with generated data and similarities
+  
+  tbl_rt_gen <- as_tibble(map2_df(
+    sim_hs, sim_strat, 
+    ~ rwiener(
+      n = n_reps, alpha = alpha, tau = tau, 
+      beta = beta, delta = delta_ic + delta_sl1 *.x + delta_sl2 * .y
+    )
+  ))
+  tbl_rt_gen$rt <- tbl_rt_gen$q
+  tbl_rt_gen$model <- "Generating: 2 Slopes"
+  tbl_rt_gen$resp_recode <- tbl_rt_gen$resp
+  tbl_rt_gen$resp <- fct_relabel(tbl_rt_gen$resp, ~ c("old", "new"))
+  tbl_rt_gen$sim_strat_z <- rep(sim_strat, each = n_reps)
+  tbl_rt_gen$sim_hotspot_z <- rep(sim_hs, each = n_reps)
+  
+  return(tbl_rt_gen)
+}
