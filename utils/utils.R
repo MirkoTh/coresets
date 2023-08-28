@@ -604,3 +604,22 @@ wiener_reg2_delta_log <- function(x, my_tbl) {
   
   return(neg2loglik)
 }
+
+gen_recognition_2_slopes <- function(params, tbl_hotspots, tbl_strat, tbl_test) {
+  #' @description convenience function generating recognition responses
+  #' given global similarity computation of presented and imagined data
+  #' and wiener diffusion process while regressing drift rate on 
+  #' these two similarities
+  #' @return a tibble with the generated responses
+  
+  l_sims <- sims_hotspot_strat(
+    params$w, params$sens, params$gamma, tbl_hotspots, tbl_strat, tbl_test
+  )
+  tbl_gen <- gen_wiener_2_slopes(
+    l_sims$sims_hotspots_z, l_sims$sims_strat_z,
+    params$alpha, params$beta, params$tau,
+    params$delta_ic, params$delta_sl1, params$delta_sl2,
+    1
+  )
+  return(tbl_gen)
+}
