@@ -334,7 +334,8 @@ tbl_test %>% group_by(label) %>%
 # recover by model just assuming sim_hotspot_z as a covariate
 # adapt wiener_ll function to handle to covariates
 tbl_ll_diff <- tibble(
-  n_reps = numeric(), it = numeric(), 
+  n_reps = numeric(), 
+  it = numeric(), 
   ll_diff = numeric(),
   ll_bivar = numeric(),
   ll_hotspot = numeric(),
@@ -348,7 +349,7 @@ for (nr in c(1, 2)) {
       ~ rwiener(
         n = nr, alpha = results_c_size$par[[1]], 
         tau = results_c_size$par[[2]], beta = results_c_size$par[[3]], 
-        delta = results_c_size$par[[4]] + 2 * .x  + .5 * .y# results_c_size$par[[4]]
+        delta = results_c_size$par[[4]] + 3 * .x  + 1 * .y# results_c_size$par[[4]]
       )
     ) %>% as_tibble() %>% 
       rename(rt = q) %>%
@@ -386,35 +387,46 @@ for (nr in c(1, 2)) {
       )
     )
     saveRDS(tbl_ll_diff, file = "data/wiener-strat-sampling-recovery.RDS")
-    
   }
 }
+
 
 tbl_ll_diff <- readRDS("data/wiener-strat-sampling-recovery.RDS")
 
 tbl_ll_diff_long <- tbl_ll_diff %>% 
   mutate(
-    n_data = rep(c(330, 660), each = 10),
-    bic_bivar = 6*log(n_data) + ll_bivar,
-    bic_hotspot = 5*log(n_data) + ll_hotspot,
-    bic_strat = 5*log(n_data) + ll_strat,
-    is_recovered = bic_bivar == pmin(bic_bivar, bic_hotspot, bic_strat),
+    n_data = n_reps * 330,
+    bic_bivar = ll_bivar + 6*log(n_data), 
+    bic_hotspot = ll_hotspot + 5*log(n_data), 
+    bic_strat = ll_strat + 5*log(n_data), 
+    aic_bivar = ll_bivar + 12,
+    aic_hotspot = ll_hotspot + 10,
+    aic_strat = ll_strat + 10,
+    is_recovered_ll = ll_bivar == pmin(ll_bivar, ll_hotspot, ll_strat),
+    is_recovered_bic = bic_bivar == pmin(bic_bivar, bic_hotspot, bic_strat),
+    is_recovered_aic = aic_bivar == pmin(aic_bivar, aic_hotspot, aic_strat),
   ) %>%
-  pivot_longer(c(bic_bivar, bic_hotspot, bic_strat))
+  #pivot_longer(c(bic_bivar, bic_hotspot, bic_strat)) %>%
+  pivot_longer(c(aic_bivar, aic_hotspot, aic_strat)) %>%
+  #pivot_longer(c(ll_bivar, ll_hotspot, ll_strat)) %>%
+  group_by(n_reps, it) %>% mutate(rwn = row_number(it)) %>% ungroup()
 
-tbl_recovered_agg <- grouped_agg(tbl_ll_diff_long, c(name, n_reps), is_recovered)
+tbl_recovered_agg <- grouped_agg(
+  tbl_ll_diff_long %>% filter(rwn == 1), 
+  c(name, n_reps), 
+  c(is_recovered_ll, is_recovered_bic, is_recovered_aic)
+)
 
 ggplot(tbl_ll_diff_long, aes(value, group = name)) +
   geom_histogram() +
   geom_label(
-    data = tbl_recovered_agg, 
-    aes(x = 100, y = 2, label = str_c("p (recov.) = ", round(mean_is_recovered, 2))
+    data = tbl_recovered_agg, aes(
+      x = mean(tbl_ll_diff_long$value), 
+      y = tbl_recovered_agg$n[1]/4, 
+      label = str_c("p (recov.) = ", round(mean_is_recovered_aic, 2))
     )
   ) +
-  facet_grid(n_reps ~ name)
-
-
-
+  facet_grid(name ~ n_reps)
 
 
 ggplot(tbl_ll_diff, aes(ll_diff)) +
