@@ -621,5 +621,39 @@ gen_recognition_2_slopes <- function(params, tbl_hotspots, tbl_strat, tbl_test) 
     params$delta_ic, params$delta_sl1, params$delta_sl2,
     1
   )
+  tbl_gen$x1 <- tbl_test$x1
+  tbl_gen$x2 <- tbl_test$x2
   return(tbl_gen)
+}
+
+
+ll_recognition_2_slopes <- function(x, tbl_hotspots, tbl_strat, tbl_test) {
+  #' @description helper function to calculate neg 2 * LL fitting 
+  #' parameters of representation model and decision model
+  #' assuming two similarities affect drift rate
+  #' @return the value of the -2 * LL
+  #' 
+  l_sims <- sims_hotspot_strat(
+    x$w, x$sens, x$gamma, tbl_hotspots, tbl_strat, tbl_test
+  )
+  tbl_test$pred_lr1 <- l_sims$sims_hotspots_z
+  tbl_test$pred_lr2 <- l_sims$sims_strat_z
+  neg2ll <- wiener_reg2_delta_log(x, tbl_test)
+  
+  return(neg2ll)
+}
+
+ll_recognition_1_slope <- function(x, tbl_hotspots, tbl_strat, tbl_test, sim_which) {
+  #' @description helper function to calculate neg 2 * LL fitting 
+  #' parameters of representation model and decision model
+  #' assuming only one similarity affects drift rate
+  #' @return the value of the -2 * LL
+  #'   
+  l_sims <- sims_hotspot_strat(
+    x$w, x$sens, x$gamma, tbl_hotspots, tbl_strat, tbl_test
+  )
+  tbl_test$pred_lr <- l_sims[[sim_which]]
+  neg2ll <- wiener_reg1_delta_log(x, tbl_test)
+  
+  return(neg2ll)
 }
