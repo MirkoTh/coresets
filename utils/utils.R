@@ -484,3 +484,45 @@ save_my_pdf_and_tiff <- function(pl, path_fl, w, h) {
   save_my_pdf(pl, str_c(path_fl, ".pdf"), w, h)
   save_my_tiff(pl, str_c(path_fl, ".tiff"), w, h)
 }
+
+
+sims_hotspot_strat <- function(w, sens, gamma, tbl_hotspots, tbl_strat, tbl_test) {
+  #' @description calculate similarities of test stimuli to originally
+  #' presented stimuli and to strategically sampled stimuli
+  #' @param w attentional weighting parameter
+  #' @param sens sensitivity parameter (aka c)
+  #' @param gamma response scaling parameter
+  #' @param tbl_hotspots presented data
+  #' @param tbl_strat imagined data
+  #' @param tbl_test test data
+  #' @return a list with both similarities
+  
+  # similarity on presented data
+  sims_hotspots <- pmap_dbl(
+    tbl_test[, c("x1", "x2")], 
+    ~ sum(pmap_dbl(
+      tbl_hotspots[, c("x1", "x2")], 
+      f_similarity, 
+      c(w, 1 - w), sens, tibble(x1 = .x, x2 = .y), 1
+    ))
+  )
+  
+  # similarity on strategically sampled data
+  sims_strat <- pmap_dbl(
+    tbl_test[, c("x1", "x2")], 
+    ~ sum(pmap_dbl(
+      tbl_strat[, c("x1", "x2")], 
+      f_similarity, 
+      c(w, 1 - w), sens, tibble(x1 = .x, x2 = .y), 1
+    ))
+  )
+  
+  # response scaling and z scaling
+  sims_strat_z <- scale(sims_strat ^ gamma)[, 1]
+  sims_hotspots_z <- scale(sims_hotspots ^ gamma)[, 1]
+  
+  return(list(
+    sims_strat_z = sims_strat_z, sims_hotspots_z = sims_hotspots_z
+  ))
+  
+}
