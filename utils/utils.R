@@ -402,7 +402,7 @@ generate_and_fit <- function(n_reps, params, k, tbl_train_orig, l_tbl_train_stra
   #' and fit them given strategically sampled data or originally presented data
   
   # generate data given strat. sampling model
-  tbl_train_strat <- l_tbl_train_strat[[k]]  %>% mutate(trial_id = sample(1:nrow(.), nrow(.), replace = FALSE))
+  tbl_train_strat <- l_tbl_train_strat[[k]] %>% mutate(trial_id = sample(1:nrow(.), nrow(.), replace = FALSE))
   tbl_generate <- generate_data(n_reps, params, tbl_transfer, tbl_train_strat, n_feat, d_measure, lo[1:3], hi[1:3])
   
   # starting values for strat. sampling and default gcm model
