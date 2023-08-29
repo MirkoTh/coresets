@@ -146,12 +146,12 @@ wiener_reg1_delta_log <- function(x, my_tbl) {
 wiener_reg2_delta_log <- function(x, my_tbl) {
   #' @description Wiener LL with linear regression on drift rate
   
-  alpha <- x[[1]]
-  tau <- x[[2]]
-  beta <- x[[3]]
-  delta_ic <- x[[4]]
-  delta_slope1 <- x[[5]]
-  delta_slope2 <- x[[6]]
+  alpha <- x[["alpha"]]
+  tau <- x[["tau"]]
+  beta <- x[["beta"]]
+  delta_ic <- x[["delta_ic"]]
+  delta_slope1 <- x[["delta_sl1"]]
+  delta_slope2 <- x[["delta_sl2"]]
   
   lik <- pmap_dbl(
     my_tbl[, c("rt", "resp_recode", "pred_lr1", "pred_lr2")], 
@@ -219,6 +219,7 @@ p_thx_response <- .2
 sims_strat_z <- scale(sims_strat^p_gamma)[, 1] #/ max(sims_strat^p_gamma)
 sims_hotspots_z <- scale(sims_hotspots^p_gamma)[, 1] # / max(sims_hotspots^p_gamma)
 hist(sims_strat_z)
+hist(sims_hotspots_z)
 
 cor(sims_strat_z, sims_hotspots_z)
 
