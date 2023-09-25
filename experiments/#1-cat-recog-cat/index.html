@@ -5,9 +5,10 @@
     <script src="jspsych-dist/dist/jspsych.js"></script>
     <script src="jspsych-dist/dist/plugin-html-button-response.js"></script>
     <script src="jspsych-dist/dist/plugin-html-keyboard-response.js"></script>
+    <script src="jspsych-dist/dist/plugin-image-keyboard-response.js"></script>
     <script src="jspsych-dist/dist/plugin-preload.js"></script>
     <script src="jspsych-dist/dist/plugin-survey-text.js"></script>
-    <script src="jspsych-6.0.4/plugins/jspsych-instructions.js"></script>
+    <script src="jspsych-dist/plugins/jspsych-instructions.js"></script>
     <script src="https://pixijs.download/release/pixi.js"></script>
     <script src="js-helpers.js"></script>
     <script src="jspsych-psychophysics.js"></script>
@@ -72,73 +73,68 @@
 
     // what we need
     // category learning train
+    //// stimuli nrs 1:150 to train
     //// stimuli 50% category 1, 50% category 2
     //// 
     // recognition 
-    //// stimuli 50% initially presented, 50% new
+    //// stimuli 50% initially presented (all), 50% new
     // category learning generalization
-    //// only new items or also again items from train?
+    //// only 150 new items: 1:150 to test
+
+    // to start, just use 2D monsters from rep change project
+
 
     var n_categories = 2;
-    var n_trials_
+    var n_trials_train = 150;
+    var n_trials_recog = n_trials_train * 2;
+    var n_trials_generalize = n_trials_train;
 
+    const x1_max = 100;
+    const x2_max = 100;
+    var id0 = [];
+    var id1 = []; // diagonal is excluded in information-integration structure
+    var cat0 = [];
+    var cat1 = [];
+    var x = [];
+    var y = [];
 
-    var nTrials_update = 20 // number of trials
-    var nTrials_immediate = 5 //
-    var nPracticeTrials = 2
-
-    var totalTrials = nPracticeTrials + nTrials_update + nTrials_immediate; //total number of trials in the entire task (practice + main task)
-
-    var n = 0 //keeps track of number of trials gone by
-    var n_update = 0;
-    var n_immediate = 0;
-
-
-    // uncomment below and comment references to pre-loaded arrays below to randomly generate stimuli for every participant on the fly
-
-    /* var tr_update = "update ".repeat(nTrials_update).split(" ");
-    tr_update.pop();
-    var tr_immediate = "immediate ".repeat(nTrials_immediate).split(" ");
-    tr_immediate.pop();
-    var trial_type = tr_update.concat(tr_immediate);
-    trial_type = jsPsych.randomization.sampleWithoutReplacement(trial_type, nTrials_update + nTrials_immediate); */
-
-
-
-    //jsPsych.randomization.sampleWithoutReplacement(..., nTrials_update + nTrials_immediate);
-
-    // we need
-    // a sequence of numbers, which serve as the initial memory set
-    // a sequence of locations, which are sequentially updated in every trial
-    // a sequence of numbers, which serve as the items to replace the previous items
-
-    /* var initial_locations = [0, 1, 2, 3];
-    var initial_set = [];
-    var locations_update = [];
-    var items_replace = [];
-    var final_set = [];
-    var immediate_set = [];
-
-    for (var i = 0; i <= nTrials_update; i++) {
-        initial_set[i] = jsPsych.randomization.sampleWithoutReplacement(possibleNumbers, set_size);
-        locations_update[i] = jsPsych.randomization.sampleWithReplacement(Array(set_size).fill().map((element, index) => index), n_upd_steps);
-        items_replace[i] = jsPsych.randomization.sampleWithoutReplacement(possibleNumbers, n_upd_steps);
-        final_set[i] = initial_set[i];
-        for (var j = 0; j <= n_upd_steps; j++) {
-            final_set[i][locations_update[i][j]] = items_replace[i][j];
+    counter = 0;
+    for (var i = 1; i <= x1_max; i++) {
+        for (var j = 1; j <= x2_max; j++) {
+            x[counter] = i;
+            y[counter] = j;
+            if (i > j) {
+                id0.push(counter);
+                cat0.push(0);
+                counter += 1;
+            } else if (i < j) {
+                id1.push(counter);
+                cat1.push(1);
+                counter += 1;
+            }
         }
     }
+    // generate random sequence of stimuli in both categories
+    const prep0 = Array(id0.length).fill().map((element, index) => index);
+    const prep1 = Array(id1.length).fill().map((element, index) => index);
+    const which_ids_0 = jsPsych.randomization.sampleWithoutReplacement(prep0, n_trials_recog / 2 + n_trials_generalize / 2);
+    const which_ids_1 = jsPsych.randomization.sampleWithoutReplacement(prep1, n_trials_recog / 2 + n_trials_generalize / 2);
 
-    for (var i = 0; i <= nTrials_immediate; i++) {
-        immediate_set[i] = jsPsych.randomization.sampleWithoutReplacement(possibleNumbers, set_size);
-    } */
 
-    var initial_set = initial_set_updating[session_id];
-    var immediate_set = immediate_set_updating[session_id];
-    var trial_type = trial_type_updating[session_id];
-    var locations_update = locations_update_updating[session_id];
-    var items_replace = items_replace_updating[session_id];
-    var final_set = final_set_updating[session_id];
+    stimuli = make_stimuli(n_trials_train, n_trials_recog, n_trials_generalize, which_ids_0, which_ids_1);
+
+    console.log("stimuli[ids_train].length = " + stimuli["ids_train"].length);
+    console.log("stimuli[ids_train] = " + stimuli["ids_train"]);
+    console.log("stimuli[cat_train] = " + stimuli["cat_train"]);
+
+    // randomize train, recog, and generalize stimuli and cat ids
+    both_train = shuffle_ids_and_cats(stimuli["ids_train"], stimuli["cat_train"]);
+    both_lures = shuffle_ids_and_cats(stimuli["ids_lures"], stimuli["cat_lures"]);
+    both_generalize = shuffle_ids_and_cats(stimuli["ids_generalize"], stimuli["cat_generalize"]);
+
+    console.log("ids_lures = " + both_lures["ids"]);
+    console.log("cat_lures = " + both_lures["cat"]);
+
 
     var n_recalled;
     var n_recalled_correctly;
@@ -171,216 +167,62 @@
     };
 
 
-    const updating_object = [];
-    for (let i = 0; i < (n_upd_steps + set_size); i++) {
-        const updating_temporal_object = {
-            obj_type: 'text',
-        }
-        updating_object.push(updating_temporal_object)
+    var train_stimuli = [];
+    for (let i = 0; i < 5; i++) { //n_trials_train
+        stim_path = {
+            stimulus: "stimuli/stimulus[" + x[both_train["ids"][i]] + "," + y[both_train["ids"][i]] + "].png",
+            correct_response: ['f', 'j'][both_train["cat"][i]]
+
+        };
+        train_stimuli.push(stim_path);
     }
 
-    const immediate_object = [];
-    for (let i = 0; i < set_size; i++) {
-        const immediate_temporal_object = {
-            obj_type: 'text',
-        }
-        immediate_object.push(immediate_temporal_object)
-    }
-
-    const viewing_time_initial = 500;
-    const viewing_time_updating = 100; // ms
-    const isi = 250; // ms
-
-    const cued_response = {
-        type: jsPsychSurveyText,
-        textarea: "width:40%;height:40%",
-        questions: [
-            {
-                prompt: `Please recall the four items from left to right;<br>
-                Please guess when you are unsure about a position: `}
-        ],
-        on_finish: function (data) {
-            var str_response = data.response["Q0"].toString();
-            var str_trim = str_response.trim();
-            var regex = /[.,;:]/g;
-            var result = str_trim.replace(regex, '');
-            var result_array = result.split("");
-            data.response_clean = result;
-            data.response_array = result_array;
-
-            var n_type;
-            var correct_sequence;
-            if (trial_type[n] == "update") {
-                n_type = n_update;
-                correct_sequence = final_set[n_update];
-            } else if (trial_type[n] == "immediate") {
-                n_type = n_immediate;
-                correct_sequence = immediate_set[n_immediate];
-            }
-            data_recall = {
-                participant_id: participant_id,
-                trial_type: trial_type[n],
-                trial_id: n_type,
-                set_size: set_size,
-                sequence_correct: correct_sequence,
-                sequence_recalled: result_array,
-                rt: data.select("rt")
-            };
-            saveSeveralData(JSON.stringify(data_recall), file_name + participant_id + ".json")
-
-            // update trial counters
-            console.log("trial_type[n] = " + trial_type[n])
-            if (trial_type[n] == "update") {
-                n_update += 1;
-            } else if (trial_type[n] == "immediate") {
-                n_immediate += 1;
-            }
-            n += 1;
-        }
+    var fixation = {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: '<div style="font-size:60px;">+</div>',
+        choices: "NO_KEYS",
+        trial_duration: 1000,
     };
 
+    var judge_category = {
+        type: jsPsychImageKeyboardResponse,
+        stimulus: jsPsych.timelineVariable('stimulus'),
+        choices: ['f', 'j'],
+        data: {
+            task: "categorization - train",
+            correct_response: jsPsych.timelineVariable("correct_response")
+        },
+        on_finish: function (data) {
+            data.correct = jsPsych.pluginAPI.compareKeys(data.response, data.correct_response);
+        }
+    }
 
-    const mixed_trial = {
-        type: jsPsychPsychophysics,
-
-        pixi: pixi_flag,
-        stimuli: function () {
-            if (trial_type[n] == "update") {
-                return updating_object
-            } else if (trial_type[n] == "immediate") {
-                return immediate_object
+    var feedback = {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: function (data) {
+            var is_correct = jsPsych.data.get().last(1).values()[0].correct;
+            console.log("is_correct = " + is_correct);
+            if (is_correct == true) {
+                return ('<div style="font-size:60px;color:green">Correct!</div>')
+            } else if (is_correct == false) {
+                return ('<div style="font-size:60px;color:red">Wrong!</div>')
             }
         },
-        trial_duration: n_upd_steps * viewing_time_updating + viewing_time_initial,
-        //response_start_time: viewing_time_initial + (viewing_time_updating + isi) * n_upd_steps - isi, // not to respond until all images are presented.
-        on_start: function (trial) {
-            // Set parameters for each image dynamically
-            if (trial_type[n] == "update") {
-                for (let i = 0; i < set_size; i++) {
-                    trial.stimuli[i].content = initial_set[n_update][i].toString();
-                    trial.stimuli[i].show_start_time = 0;
-                    trial.stimuli[i].show_end_time = viewing_time_initial;
-                    trial.stimuli[i].origin_center = true;
-                    trial.stimuli[i].startX = [-300, -100, 100, 300][i];
-                    trial.stimuli[i].text_color = ["black", "green", "red", "blue"][i];
-                    trial.stimuli[i].font = '60px Arial';
-                }
-                for (let i = set_size; i < (n_upd_steps + set_size); i++) {
-                    trial.stimuli[i].content = items_replace[n_update][i - set_size].toString();
-                    trial.stimuli[i].show_start_time = viewing_time_initial + viewing_time_updating * (i - set_size);
-                    trial.stimuli[i].show_end_time = viewing_time_initial + viewing_time_updating * (i - set_size) + viewing_time_updating;
-                    trial.stimuli[i].origin_center = true;
-                    trial.stimuli[i].startX = [-300, -100, 100, 300][locations_update[n_update][i - set_size]];
-                    trial.stimuli[i].text_color = ["black", "green", "red", "blue"][locations_update[n_update][i - set_size]];
-                    trial.stimuli[i].font = '60px Arial';
-                }
-            } else if (trial_type[n] == "immediate") {
-                for (let i = 0; i < set_size; i++) {
-                    trial.stimuli[i].content = immediate_set[n_immediate][i].toString();
-                    trial.stimuli[i].show_start_time = 0;
-                    trial.stimuli[i].origin_center = true;
-                    trial.stimuli[i].show_end_time = viewing_time_initial;
-                    trial.stimuli[i].startX = [-300, -100, 100, 300][i];
-                    trial.stimuli[i].text_color = ["black", "green", "red", "blue"][i];
-                    trial.stimuli[i].font = '60px Arial';
-                }
-            }
-            //trial.stimuli[n_upd_steps + set_size - 1].trial_duration = 0;
-            console.log(trial.stimuli)
-        }
-    }
-
-    const mixed_node_practice = {
-        timeline: [mixed_trial, cued_response],
-        repetitions: 2,
-        /* loop_function: function (data) {
-    if (jsPsych.pluginAPI.compareKeys(data.values()[0].response, ' ')) {
-        return true;
-    } else {
-        return false;
-    }
-} */
-    };
-    const mixed_node_main = {
-        timeline: [mixed_trial, cued_response],
-        repetitions: nTrials_update + nTrials_immediate,
+        choices: "NO_KEYS",
+        trial_duration: 1000,
     };
 
+    var train_procedure = {
+        timeline: [fixation, judge_category, feedback],
+        timeline_variables: train_stimuli
+    }
 
-    jsPsych.run([instructions1, instructions2, instructions3, instructions4, mixed_node_practice, instructions_test, mixed_node_main]);
 
-    /*
-        const image1 = {
-            obj_type: 'image',
-            file: jsPsych.timelineVariable('first_image'),
-            show_start_time: 500, // ms after the start of the trial
-            show_end_time: 1000,
-            startX: jsPsych.timelineVariable('first_image_position'),
-            origin_center: true
-        }
-    
-        const image2 = {
-            obj_type: 'image',
-            file: jsPsych.timelineVariable('second_image'),
-            show_start_time: 1000, // ms after the start of the trial
-            show_end_time: 1500,
-            startX: jsPsych.timelineVariable('second_image_position'),
-            origin_center: true
-        }
-    
-        const two_consecutive_images = {
-            type: jsPsychPsychophysics,
-            pixi: pixi_flag,
-            stimuli: [image1, image2],
-            trial_duration: 2000, // The trial continues during this duration.
-            choices: "NO_KEYS" // Any participant's responses are not allowed.
-        }
-    
-        const likert = {
-            type: jsPsychSurveyLikert,
-            questions: [
-                { prompt: "Which image do you prefer?", name: 'favorite_image', labels: ["Left", "Right"], required: true }
-            ],
-            data: {
-                'first_image': jsPsych.timelineVariable('first_image'),
-                'second_image': jsPsych.timelineVariable('second_image'),
-                'first_image_position': jsPsych.timelineVariable('first_image_position'),
-                'second_image_position': jsPsych.timelineVariable('second_image_position'),
-            },
-            on_finish: function (data) {
-                jsPsych.data.get().addToLast(data.response); // separate into individual columns in an output CSV file.
-            }
-        };
-    
-        const text_input = {
-            type: jsPsychSurveyText,
-            questions: [
-                { prompt: 'Describe your impressions about the two images.', name: 'impression', rows: 5 }
-            ],
-            data: function () {
-                const tmp_object = {
-                    'first_image': jsPsych.timelineVariable('first_image'),
-                    'second_image': jsPsych.timelineVariable('second_image'),
-                    'first_image_position': jsPsych.timelineVariable('first_image_position'),
-                    'second_image_position': jsPsych.timelineVariable('second_image_position'),
-                };
-                return Object.assign(tmp_object, jsPsych.data.getLastTrialData().values()[0].response);
-            },
-            on_finish: function (data) {
-                jsPsych.data.get().addToLast(data.response); // separate into individual columns in an output CSV file.
-            }
-        }
-    
-        const trial = {
-            timeline: [two_consecutive_images, likert, text_input],
-            timeline_variables: [
-                { first_image: images[0], second_image: images[1], first_image_position: -200, second_image_position: 200 },
-                { first_image: images[2], second_image: images[3], first_image_position: 200, second_image_position: -200 },
-                { first_image: images[4], second_image: images[5], first_image_position: -200, second_image_position: 200 }
-            ],
-            randomize_order: true
-        }
-     */
+    timeline = [];
+    timeline.push(train_procedure);
+
+    /* start the experiment */
+    jsPsych.run(timeline);
 
 </script>
 
