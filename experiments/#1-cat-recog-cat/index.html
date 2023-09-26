@@ -13,18 +13,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="2D Representations">
     <meta name="author" content="Mirko Thalmann, Akshay Jagadish, & Eric Schulz">
-    <link rel="stylesheet" href="myStyle.css" cache-control="public">
+    <link rel="stylesheet" href="my-style.css" cache-control="public">
+    <link rel="stylesheet" href="jspsych-dist/dist/jspsych.css">
     <script src="js-helpers.js" charset="utf-8" cache-control="public"></script>
 
 </head>
 
 <body>
 
-    <!-- <div id="n_trials_cat_lag" style="display:none">-1</div> -->
 
-    <div class='centeredtext'>
+    <div>
 
-        <div id="page0" style="display:block">
+        <div id="page0" class='centeredtext'>
 
             <h1>Welcome to the study</h1>
 
@@ -59,10 +59,13 @@
             </ul>
 
             <br><br>
+            <button id="consent_button" type="button" name="button" id="buttonConsentForm" class="jspsych-btn"
+                style=" position: absolute;left: 45%;" onclick="direct_to_study()"> Informed
+                Consent</button><br>
+            <!-- clickStart('page0', 'page1') -->
 
-            <button id="consent_button" type="button" name="button" id="buttonConsentForm" class="default_button"
-                onclick="clickStart('page0', 'page1')"> Informed Consent</button><br>
         </div>
+
 
 
         <div id="page1" style="display:none;">

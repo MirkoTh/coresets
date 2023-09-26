@@ -1,0 +1,116 @@
+.centeredtext {
+  text-align: left;
+  border: none;
+  width: 80%;
+  height: 80%;
+  list-style-position: inside;
+  font-size: 30px;
+  font-family: 'Helvetica';
+  line-height: 1.6em;
+  margin: auto;
+  max-width: 95%;
+}
+
+.slidecontainer1 {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: 375px;
+}
+
+.slidecontainer2 {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: 415px;
+}
+
+.slider {
+  -webkit-appearance: none;
+  width: 50%;
+  height: 10px;
+  background: #d3d3d3;
+  outline: none;
+  opacity: 0.7;
+  -webkit-transition: .2s;
+  transition: opacity .2s;
+}
+
+.slider:hover {
+  opacity: 1;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  background: #04AA6D;
+  cursor: pointer;
+}
+
+.slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  background: #04AA6D;
+  cursor: pointer;
+}
+
+.default_button {
+  height: 30px;
+  font-size: 80%;
+  position:absolute; top: 85%;
+}
+
+.cr_button {
+  position: absolute;
+  top: 500px;
+  left: 46%;
+  width: 150px;
+  height: 30px;
+}
+
+.present_stimulus {
+  position: absolute;
+  top: 5%;
+  left: 44.725%;
+  width: 200px;
+  height: 300px;
+  text-align: center;
+}
+
+.present_stimulus_l {
+  position: absolute;
+  top: 5%;
+  left: 36.725%;
+  width: 200px;
+  height: 300px;
+  text-align: center;
+}
+
+.present_stimulus_r {
+  position: absolute;
+  top: 5%;
+  left: 52.725%;
+  width: 200px;
+  height: 300px;
+  text-align: center;
+}
+
+.cat_feedback_neg {
+  position: absolute;
+  top: 450px;
+  left: 41.5%;
+  width: 300px;
+}
+
+.cat_feedback_pos {
+  position: absolute;
+  top: 450px;
+  left: 41.5%;
+  width: 300px;
+}
