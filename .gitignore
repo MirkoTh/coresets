@@ -11,3 +11,4 @@ literature/
 renv/
 *.ipynb_checkpoints*
 open-data/
+experiments/#1-cat-recog-cat/stimuli/

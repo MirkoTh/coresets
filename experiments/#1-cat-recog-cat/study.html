@@ -30,11 +30,8 @@
 
     // still to do
     // save data on server
-    // create fixed stimulus set and load it
+    // use final stimuli
 
-
-    // This file demonstrates how to present multiple images in random order in succession.
-    // That is, Rapid serial visual presentation (RSVP) 
 
     const jsPsych = initJsPsych({
         on_finish: function () {
@@ -70,20 +67,6 @@
     }
 
     console.log("current participant_id = " + participant_id);
-
-
-    // what we need
-    // category learning train
-    //// stimuli nrs 1:150 to train
-    //// stimuli 50% category 1, 50% category 2
-    //// 
-    // recognition 
-    //// stimuli 50% initially presented (all), 50% new
-    // category learning generalization
-    //// only 150 new items: 1:150 to test
-
-    // to start, just use 2D monsters from rep change project
-
 
     var n_categories = 2;
     var n_trials_train = 150;
@@ -126,7 +109,6 @@
 
     // randomize train, recog, and generalize stimuli and cat ids
     both_train = shuffle_items(stimuli["ids_train"], stimuli["cat_train"]);
-
     both_lures = shuffle_items(stimuli["ids_lures"], stimuli["cat_lures"]);
     both_generalize = shuffle_items(stimuli["ids_generalize"], stimuli["cat_generalize"]);
 
@@ -149,13 +131,6 @@
     console.log("recognition_probes = " + recognition_probes["cat"]);
     console.log("recognition_probes = " + recognition_probes["is_old"]);
 
-    // todos
-    //// add 0 and 1 whether train or lure item
-    //// concat training items and lures
-    //// reshuffle all items and keep, which one is old and new
-    //// present items, similarly as in train
-    //// present generalize items, similarly as in train
-
     var n_recalled;
     var n_recalled_correctly;
 
@@ -166,17 +141,71 @@
         choices: ["Preferences I"],
     };
 
+    var debriefing_train = {
+        type: jsPsychHtmlButtonResponse,
+        stimulus: `<div style="font-size:30px;">Well done! That was the first part of the study.<br> What follows is the second part.<br>Please continue to the instructions of the memory test.<br><br></div>`,
+        choices: ["To Memory Test"],
+    };
+
     var instructions_recognition = {
         type: jsPsychHtmlButtonResponse,
         stimulus: `<div style="font-size:30px;">In every trial, an object is presented on the screen. If it has been presented before, press 'J'.<br>If it has not, press 'F'.<br>Your chosen response will be shown on the screen after you have pressed one of the respective buttons.<br><br><br></div>`,
         choices: ["Start Memory Test"],
     };
 
+    var debriefing_recognition = {
+        type: jsPsychHtmlButtonResponse,
+        stimulus: `<div style="font-size:30px;">Well done! That was the second part of the study.<br> What follows is the third and final part.<br>Please continue to the instructions of the final part.<br><br></div>`,
+        choices: ["To Final Part"],
+    };
+
+
     var instructions_generalize = {
         type: jsPsychHtmlButtonResponse,
         stimulus: `<div style="font-size:30px;">In every trial, an object is presented on the screen. If you think, Mira likes it, press 'F'.<br>If you think, it does not, press 'J'.<br>This time, there will be no feedback after your responses, but your response will be shown on the screen after you have pressed one of the respective buttons.<br><br><br></div>`,
         choices: ["Preferences II"],
     };
+
+
+    function aggregate_correct(str_task) {
+        var trials_cat_train = jsPsych.data.get().filter({ task: str_task });
+        var correct_trials = trials.filter({ correct: true });
+        var accuracy = Math.round(correct_trials.count() / trials.count() * 100);
+        return (accuracy)
+    }
+
+    var debriefing_generalize = {
+        type: jsPsychHtmlButtonResponse,
+        stimulus: function () {
+            accuracy_cat_train = aggregate_correct('categorization - train');
+            accuracy_recognition = aggregate_correct('recognition');
+            accuracy_cat_generalize = aggregate_correct('categorization - generalize');
+            var bonus = accuracy_cat_train + accuracy_recognition + accuracy_cat_generalize;
+
+            var bonus_store = {
+                participant_id: participant_id,
+                bonus_cat_train: accuracy_cat_train,
+                bonus_recognition: accuracy_recognition,
+                bonus_cat_generalize: accuracy_cat_generalize,
+                bonus_total: accuracy_cat_train + accuracy_recognition + accuracy_cat_generalize
+            }
+            saveBonus(JSON.stringify(bonus_store));
+
+            return `
+            This was the last part of the experiment.<br>
+            Thank you very much for participaing.<br>
+            <p>You responded correctly on ${accuracy_cat_train}% of the trials in preferences I.</p>
+            <p>You responded correctly on ${accuracy_recognition}% of the trials in the memory part.</p>
+            <p>You responded correctly on ${accuracy_cat_generalize}% of the trials in preferences II.</p>
+            <p>Your bonus transferred to your prolific account is: ${bonus} GBP.</p>
+            
+            <p>Press any key to complete the experiment. Thank you!</p>
+            `;
+        },
+        choices: ["Return To Prolific"],
+        on_finish: redirect_to_prolific() { }
+    };
+
 
     var train_stimuli = [];
     for (let i = 0; i < 5; i++) { //n_trials_train
@@ -216,12 +245,38 @@
         trial_duration: 500,
     };
 
-    var judge_category = {
+    var train_category = {
         type: jsPsychImageKeyboardResponse,
         stimulus: jsPsych.timelineVariable('stimulus'),
         choices: ['f', 'j'],
         data: {
             task: "categorization - train",
+            correct_response: jsPsych.timelineVariable("correct_response")
+        },
+        on_finish: function (data) {
+            data.correct = jsPsych.pluginAPI.compareKeys(data.response, data.correct_response);
+        }
+    }
+
+    var generalize_category = {
+        type: jsPsychImageKeyboardResponse,
+        stimulus: jsPsych.timelineVariable('stimulus'),
+        choices: ['f', 'j'],
+        data: {
+            task: "categorization - generalize",
+            correct_response: jsPsych.timelineVariable("correct_response")
+        },
+        on_finish: function (data) {
+            data.correct = jsPsych.pluginAPI.compareKeys(data.response, data.correct_response);
+        }
+    }
+
+    var recognition_memory = {
+        type: jsPsychImageKeyboardResponse,
+        stimulus: jsPsych.timelineVariable('stimulus'),
+        choices: ['f', 'j'],
+        data: {
+            task: "recognition",
             correct_response: jsPsych.timelineVariable("correct_response")
         },
         on_finish: function (data) {
@@ -275,17 +330,17 @@
     };
 
     var train_procedure = {
-        timeline: [fixation, judge_category, feedback],
+        timeline: [fixation, train_category, feedback],
         timeline_variables: train_stimuli
     }
 
     var recognition_procedure = {
-        timeline: [fixation, judge_category, shadow_response_recog],
+        timeline: [fixation, recognition_memory, shadow_response_recog],
         timeline_variables: recognition_stimuli
     }
 
     var generalization_procedure = {
-        timeline: [fixation, judge_category, shadow_response_generalization],
+        timeline: [fixation, generalize_category, shadow_response_generalization],
         timeline_variables: generalization_stimuli
     }
 

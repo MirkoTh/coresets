@@ -9,9 +9,13 @@ function getQueryVariable(variable) {
     return (false);
 }
 
-
 function saveData(filedata, task) {
     var filename = "./data/" + task + "-participant-" + participant_id + ".json";
+    $.post("save_data.php", { postresult: filedata + "\n", postfile: filename })
+}
+
+function saveBonus(filedata) {
+    var filename = "./data/bonus.json";
     $.post("save_data.php", { postresult: filedata + "\n", postfile: filename })
 }
 
@@ -154,6 +158,11 @@ function condition_and_ncategories() {
 
 function direct_to_study() {
     window.location.href = "study.html";
+}
+
+// link has to be changed probably
+function redirect_to_prolific() {
+    window.location.href = "https://app.prolific.co/submissions/complete?cc=240D34C0";
 }
 
 var flag = 0;
