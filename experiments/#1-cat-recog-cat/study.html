@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script src="jspsych-dist/dist/jspsych.js"></script>
+    <script src="jspsych-dist/dist/plugin-html-button-response.js"></script>
+    <script src="jspsych-dist/dist/plugin-html-keyboard-response.js"></script>
+    <script src="jspsych-dist/dist/plugin-image-keyboard-response.js"></script>
+    <script src="jspsych-dist/dist/plugin-preload.js"></script>
+    <script src="jspsych-dist/dist/plugin-survey-text.js"></script>
+    <script src="jspsych-dist/plugins/jspsych-instructions.js"></script>
+    <script src="https://pixijs.download/release/pixi.js"></script>
+    <script src="js-helpers.js"></script>
+    <script src="js-text.js"></script>
+    <script src="jspsych-psychophysics.js"></script>
+    <link rel="stylesheet" href="jspsych-dist/dist/jspsych.css">
+    <link rel="stylesheet" href="my-style.css">
+    <style>
+        .jspsych-display-element {
+            font-size: 40px;
+        }
+    </style>
+    </link>
+</head>
+
+
+<body></body>
+<script>
+
+
+    // still to do
+    // save data on server
+    // create fixed stimulus set and load it
+
+
+    // This file demonstrates how to present multiple images in random order in succession.
+    // That is, Rapid serial visual presentation (RSVP) 
+
+    const jsPsych = initJsPsych({
+        on_finish: function () {
+            jsPsych.data.displayData();
+        }
+    })
+    console.log(`jsPsych Version ${jsPsych.version()}`)
+
+    const pixi_flag = jsPsych.data.getURLVariable('pixi_flag') === '1' ? true : false;
+
+    randomize = true // present different set sizes in random order. if false, set sizes will be presented in ascending order
+    file_name = null // file name for data file. if null, a default name consisting of the participant ID and a unique number is chosen.
+    local = true // save the data file locally.
+    // If this test is being run online (e.g., on MTurk), true will cause the file to be downloaded to the participant's computer.
+    // If this test is on a server, and you wish to save the data file to that server, change this to false.
+    // If changed to false, ensure that the php file (its in the directory!) and the empty "data" folder has also been appropriately uploaded to the server.
+    // Incase of problems, feel free to contact me :)
+
+    //----------------------------------------------------------------------
+
+
+
+    if (window.location.search.indexOf('PROLIFIC_PID') > -1) {
+        var participant_id = getQueryVariable('PROLIFIC_PID');
+    }
+    // If no ID is present, generate one using random numbers - this is useful for testing
+    else {
+        var participant_id = Math.floor(Math.random() * 1000);
+    }
+    // STUDY ID
+    if (window.location.search.indexOf('STUDY_ID') > -1) {
+        var studyID = getQueryVariable('STUDY_ID');
+    }
+
+    console.log("current participant_id = " + participant_id);
+
+
+    // what we need
+    // category learning train
+    //// stimuli nrs 1:150 to train
+    //// stimuli 50% category 1, 50% category 2
+    //// 
+    // recognition 
+    //// stimuli 50% initially presented (all), 50% new
+    // category learning generalization
+    //// only 150 new items: 1:150 to test
+
+    // to start, just use 2D monsters from rep change project
+
+
+    var n_categories = 2;
+    var n_trials_train = 150;
+    var n_trials_recog = n_trials_train * 2;
+    var n_trials_generalize = n_trials_train;
+
+    const x1_max = 100;
+    const x2_max = 100;
+    var id0 = [];
+    var id1 = []; // diagonal is excluded in information-integration structure
+    var cat0 = [];
+    var cat1 = [];
+    var x = [];
+    var y = [];
+
+    counter = 0;
+    for (var i = 1; i <= x1_max; i++) {
+        for (var j = 1; j <= x2_max; j++) {
+            x[counter] = i;
+            y[counter] = j;
+            if (i > j) {
+                id0.push(counter);
+                cat0.push(0);
+                counter += 1;
+            } else if (i < j) {
+                id1.push(counter);
+                cat1.push(1);
+                counter += 1;
+            }
+        }
+    }
+    // generate random sequence of stimuli in both categories
+    const prep0 = Array(id0.length).fill().map((element, index) => index);
+    const prep1 = Array(id1.length).fill().map((element, index) => index);
+    const which_ids_0 = jsPsych.randomization.sampleWithoutReplacement(prep0, n_trials_recog / 2 + n_trials_generalize / 2);
+    const which_ids_1 = jsPsych.randomization.sampleWithoutReplacement(prep1, n_trials_recog / 2 + n_trials_generalize / 2);
+
+    stimuli = make_stimuli(n_trials_train, n_trials_recog, n_trials_generalize, which_ids_0, which_ids_1);
+
+
+    // randomize train, recog, and generalize stimuli and cat ids
+    both_train = shuffle_items(stimuli["ids_train"], stimuli["cat_train"]);
+
+    both_lures = shuffle_items(stimuli["ids_lures"], stimuli["cat_lures"]);
+    both_generalize = shuffle_items(stimuli["ids_generalize"], stimuli["cat_generalize"]);
+
+    for (var i = 0; i < both_train["ids"].length; i++) {
+        both_train["is_old"][i] = 1;
+    }
+
+    for (var i = 0; i < both_lures["ids"].length; i++) {
+        both_lures["is_old"][i] = 0;
+    }
+
+    // reshuffle for presentation during recognition
+    recognition_probes = shuffle_items(
+        both_train["ids"].concat(both_lures["ids"]),
+        both_train["cat"].concat(both_lures["cat"]),
+        both_train["is_old"].concat(both_lures["is_old"])
+    );
+
+    console.log("recognition_probes = " + recognition_probes["ids"]);
+    console.log("recognition_probes = " + recognition_probes["cat"]);
+    console.log("recognition_probes = " + recognition_probes["is_old"]);
+
+    // todos
+    //// add 0 and 1 whether train or lure item
+    //// concat training items and lures
+    //// reshuffle all items and keep, which one is old and new
+    //// present items, similarly as in train
+    //// present generalize items, similarly as in train
+
+    var n_recalled;
+    var n_recalled_correctly;
+
+
+    var instructions_train = {
+        type: jsPsychHtmlButtonResponse,
+        stimulus: `<div style="font-size:30px;">In every trial, an object is presented on the screen. If you think, Mira likes it, press 'F'.<br>If you think, it does not, press 'J'.<br>There will be feedback after every response, which helps you sharpen your understanding of Mira's preferences.<br><br><br></div>`,
+        choices: ["Preferences I"],
+    };
+
+    var instructions_recognition = {
+        type: jsPsychHtmlButtonResponse,
+        stimulus: `<div style="font-size:30px;">In every trial, an object is presented on the screen. If it has been presented before, press 'J'.<br>If it has not, press 'F'.<br>Your chosen response will be shown on the screen after you have pressed one of the respective buttons.<br><br><br></div>`,
+        choices: ["Start Memory Test"],
+    };
+
+    var instructions_generalize = {
+        type: jsPsychHtmlButtonResponse,
+        stimulus: `<div style="font-size:30px;">In every trial, an object is presented on the screen. If you think, Mira likes it, press 'F'.<br>If you think, it does not, press 'J'.<br>This time, there will be no feedback after your responses, but your response will be shown on the screen after you have pressed one of the respective buttons.<br><br><br></div>`,
+        choices: ["Preferences II"],
+    };
+
+    var train_stimuli = [];
+    for (let i = 0; i < 5; i++) { //n_trials_train
+        stim_path = {
+            stimulus: "stimuli/stimulus[" + x[both_train["ids"][i]] + "," + y[both_train["ids"][i]] + "].png",
+            correct_response: ['f', 'j'][both_train["cat"][i]]
+
+        };
+        train_stimuli.push(stim_path);
+    }
+
+
+    var recognition_stimuli = [];
+    for (let i = 0; i < 5; i++) { //n_trials_recog
+        stim_path = {
+            stimulus: "stimuli/stimulus[" + x[recognition_probes["ids"][i]] + "," + y[recognition_probes["ids"][i]] + "].png",
+            correct_response: ['f', 'j'][recognition_probes["is_old"][i]]
+        };
+        recognition_stimuli.push(stim_path);
+    }
+
+
+    var generalization_stimuli = [];
+    for (let i = 0; i < 5; i++) { //n_trials_generalize
+        stim_path = {
+            stimulus: "stimuli/stimulus[" + x[both_generalize["ids"][i]] + "," + y[both_generalize["ids"][i]] + "].png",
+            correct_response: ['f', 'j'][both_generalize["cat"][i]]
+
+        };
+        generalization_stimuli.push(stim_path);
+    }
+
+    var fixation = {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: '<div style="font-size:60px;">+</div>',
+        choices: "NO_KEYS",
+        trial_duration: 500,
+    };
+
+    var judge_category = {
+        type: jsPsychImageKeyboardResponse,
+        stimulus: jsPsych.timelineVariable('stimulus'),
+        choices: ['f', 'j'],
+        data: {
+            task: "categorization - train",
+            correct_response: jsPsych.timelineVariable("correct_response")
+        },
+        on_finish: function (data) {
+            data.correct = jsPsych.pluginAPI.compareKeys(data.response, data.correct_response);
+        }
+    }
+
+    var feedback = {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: function (data) {
+            var is_correct = jsPsych.data.get().last(1).values()[0].correct;
+            console.log("is_correct = " + is_correct);
+            if (is_correct == true) {
+                return ('<div style="font-size:60px;color:green">Correct!</div>')
+            } else if (is_correct == false) {
+                return ('<div style="font-size:60px;color:red">Wrong!</div>')
+            }
+        },
+        choices: "NO_KEYS",
+        trial_duration: 500,
+    };
+
+    var shadow_response_recog = {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: function (data) {
+            var given_response = jsPsych.data.get().last(1).values()[0].response;
+            console.log("given_response = " + given_response);
+            if (given_response == 'j') {
+                return ('<div style="font-size:60px;">Old!</div>')
+            } else if (given_response == 'f') {
+                return ('<div style="font-size:60px">New!</div>')
+            }
+        },
+        choices: "NO_KEYS",
+        trial_duration: 500,
+    };
+
+    var shadow_response_generalization = {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: function (data) {
+            var given_response = jsPsych.data.get().last(1).values()[0].response;
+            console.log("given_response = " + given_response);
+            if (given_response == 'j') {
+                return ('<div style="font-size:60px;">Dislike!</div>')
+            } else if (given_response == 'f') {
+                return ('<div style="font-size:60px">Like!</div>')
+            }
+        },
+        choices: "NO_KEYS",
+        trial_duration: 500,
+    };
+
+    var train_procedure = {
+        timeline: [fixation, judge_category, feedback],
+        timeline_variables: train_stimuli
+    }
+
+    var recognition_procedure = {
+        timeline: [fixation, judge_category, shadow_response_recog],
+        timeline_variables: recognition_stimuli
+    }
+
+    var generalization_procedure = {
+        timeline: [fixation, judge_category, shadow_response_generalization],
+        timeline_variables: generalization_stimuli
+    }
+
+    timeline = [instructions_train];
+    timeline.push(train_procedure);
+    timeline = [instructions_recognition];
+    timeline.push(recognition_procedure);
+    timeline = [instructions_generalize];
+    timeline.push(generalization_procedure);
+
+    /* start the experiment */
+    jsPsych.run(timeline);
+
+</script>
+
+</html>

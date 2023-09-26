@@ -127,16 +127,20 @@ function make_stimuli(n_trials_train, n_trials_recog, n_trials_generalize, which
 }
 
 
-function shuffle_ids_and_cats(ids, cats) {
+function shuffle_items(ids, cats, is_old = null) {
     ids_fin = [];
     cat_fin = [];
+    is_old_fin = [];
     idxs = Array(ids.length).fill().map((element, index) => index);
     idxs_shuffled = jsPsych.randomization.sampleWithoutReplacement(idxs, ids.length);
     for (var i = 0; i < idxs.length; i++) {
         ids_fin[i] = ids[idxs_shuffled[i]];
         cat_fin[i] = cats[idxs_shuffled[i]];
+        if (is_old != null) {
+            is_old_fin[i] = is_old[idxs_shuffled[i]];
+        }
     }
-    both = { ids: ids_fin, cat: cat_fin };
+    both = { ids: ids_fin, cat: cat_fin, is_old: is_old_fin };
     return (both);
 }
 
