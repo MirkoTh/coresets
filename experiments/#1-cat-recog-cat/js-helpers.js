@@ -141,3 +141,86 @@ function shuffle_ids_and_cats(ids, cats) {
 }
 
 
+function condition_and_ncategories() {
+
+    document.getElementById("condition_id").innerHTML = condition_id
+    document.getElementById("n_categories").innerHTML = n_categories
+    clickStart('page0', 'page1')
+}
+
+function direct_to_study() {
+    window.location.href = "study.html";
+}
+
+var flag = 0;
+var instcounter = 0;
+function instructioncheck(pg, pg_prev) {
+    var ch1 = 0;
+    var ch2 = 0;
+    var ch3 = 0;
+    var ch4 = 0;
+    var ch5 = 0;
+    //check if correct answers are provided
+    if (document.getElementById('icheck1').checked) { var ch1 = 1; color('q1icheck1', 'green') }
+    else { colorWrongAnswer("q1", 'red') }
+    if (document.getElementById('icheck2').checked) { var ch2 = 1; color('q2icheck2', 'green') }
+    else { colorWrongAnswer("q2", 'red') }
+    if (document.getElementById('icheck3').checked) { var ch3 = 1; color('q3icheck3', 'green') }
+    else { colorWrongAnswer("q3", 'red') }
+    if (document.getElementById('icheck4').checked) { var ch4 = 1; color('q4icheck4', 'green') }
+    else { colorWrongAnswer("q4", 'red') }
+    if (document.getElementById('icheck5').checked) { var ch5 = 1; color('q5icheck5', 'green') }
+    else { colorWrongAnswer("q5", 'red') }
+
+    var checksum = ch1 + ch2 + ch3 + ch4 + ch5;
+    var criterion = 5;
+
+    // indicate correct answers
+    ++flag;
+    clickStart(pg, pg);
+    change("check", "Continue")
+
+    // page transition 
+    if ((checksum === criterion) && (flag == 2)) {
+        //if correct, continue 
+        //begintrial();
+        direct_to_study();
+        // alert
+        alert('Great, you have answered all of the questions correctly. The study will now start.');
+    }
+    else {
+        if (flag == 2) {
+            instcounter++;
+            colorWrongAnswer("q1", '#333333')
+            colorWrongAnswer("q2", '#333333')
+            colorWrongAnswer("q3", '#333333')
+            colorWrongAnswer("q4", '#333333')
+            colorWrongAnswer("q5", '#333333')
+            //if one or more answers are wrong, raise alert box
+            alert('You have answered some of the questions wrong. Please try again.');
+            // go back to instructions
+            clickStart(pg, pg_prev);
+            flag = 0;
+
+        }
+    }
+
+}
+
+//function to hide one html div and show another
+function clickStart(hide, show) {
+    document.getElementById(hide).style.display = 'none';
+    document.getElementById(show).style.display = 'block';
+    window.scrollTo(0, 0);
+}
+
+
+// color text
+function color(id, col) {
+    document.getElementById(id).style.color = col;
+}
+
+//changes inner HTML of div with ID=x to y
+function change(x, y) {
+    document.getElementById(x).innerHTML = y;
+}

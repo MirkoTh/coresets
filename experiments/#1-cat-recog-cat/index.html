@@ -1,229 +1,322 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
+
+
 
 <head>
-    <script src="jspsych-dist/dist/jspsych.js"></script>
-    <script src="jspsych-dist/dist/plugin-html-button-response.js"></script>
-    <script src="jspsych-dist/dist/plugin-html-keyboard-response.js"></script>
-    <script src="jspsych-dist/dist/plugin-image-keyboard-response.js"></script>
-    <script src="jspsych-dist/dist/plugin-preload.js"></script>
-    <script src="jspsych-dist/dist/plugin-survey-text.js"></script>
-    <script src="jspsych-dist/plugins/jspsych-instructions.js"></script>
-    <script src="https://pixijs.download/release/pixi.js"></script>
-    <script src="js-helpers.js"></script>
-    <script src="jspsych-psychophysics.js"></script>
-    <link rel="stylesheet" href="jspsych-dist/dist/jspsych.css">
-    <link rel="stylesheet" href="my-style.css">
-    <style>
-        .jspsych-display-element {
-            font-size: 40px;
-        }
-    </style>
-    </link>
+    <meta charset="utf-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="-1">
+    <title>2D Representations</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="2D Representations">
+    <meta name="author" content="Mirko Thalmann, Akshay Jagadish, & Eric Schulz">
+    <link rel="stylesheet" href="myStyle.css" cache-control="public">
+    <script src="js-helpers.js" charset="utf-8" cache-control="public"></script>
+
 </head>
 
+<body>
 
-<body></body>
-<script>
+    <!-- <div id="n_trials_cat_lag" style="display:none">-1</div> -->
 
+    <div class='centeredtext'>
 
-    // still to do
-    // save data on server
-    // create fixed stimulus set and load it
+        <div id="page0" style="display:block">
 
+            <h1>Welcome to the study</h1>
 
-    // This file demonstrates how to present multiple images in random order in succession.
-    // That is, Rapid serial visual presentation (RSVP) 
+            This study is part of a research project conducted
+            by the <a href="http://cpilab.org/" target="_blank">Computational Principles of Intelligence Group</a><br>
+            at the Max Planck Institute for Biological Cybernetics in Tuebingen, Germany.<br><br>
 
-    const jsPsych = initJsPsych({
-        on_finish: function () {
-            jsPsych.data.displayData();
-        }
-    })
-    console.log(`jsPsych Version ${jsPsych.version()}`)
+            <span>
+                <img title="tuebingen" src="stimuli/tuebingen.jpg" height="300px" cache-control="public">
+                <img title="mpi" src="stimuli/mpi.jpg" height="300px" cache-control="public">
+                <figcaption style="font-size: 12px;">By Rabe! - Own work, CC BY-SA 3.0, <a
+                        href=" https://commons.wikimedia.org/w/index.php?curid=33554043" target="_blank"> Source </a>
+                </figcaption>
+            </span>
 
-    const pixi_flag = jsPsych.data.getURLVariable('pixi_flag') === '1' ? true : false;
+            <br>
+            <b>Please</b>
+            <ul>
+                <li>
+                    Make sure you have a good internet connection from the beginning to the end of the study.
+                    Disconnections will cause problems in displaying visuals and we will not be able to use your data.
+                </li>
+                <li>
+                    Switch off your addblockers during the study. That will allow us to trace back any unexpected
+                    errors.
+                </li>
+                <li>
+                    Do not 'refresh' your browser during the study. You will have to start from the very beginning again
+                    and we will not be able to use your data.
+                </li>
 
-    randomize = true // present different set sizes in random order. if false, set sizes will be presented in ascending order
-    file_name = null // file name for data file. if null, a default name consisting of the participant ID and a unique number is chosen.
-    local = true // save the data file locally.
-    // If this test is being run online (e.g., on MTurk), true will cause the file to be downloaded to the participant's computer.
-    // If this test is on a server, and you wish to save the data file to that server, change this to false.
-    // If changed to false, ensure that the php file (its in the directory!) and the empty "data" folder has also been appropriately uploaded to the server.
-    // Incase of problems, feel free to contact me :)
+            </ul>
 
-    //----------------------------------------------------------------------
+            <br><br>
 
-
-
-    if (window.location.search.indexOf('PROLIFIC_PID') > -1) {
-        var participant_id = getQueryVariable('PROLIFIC_PID');
-    }
-    // If no ID is present, generate one using random numbers - this is useful for testing
-    else {
-        var participant_id = Math.floor(Math.random() * 1000);
-    }
-    // STUDY ID
-    if (window.location.search.indexOf('STUDY_ID') > -1) {
-        var studyID = getQueryVariable('STUDY_ID');
-    }
-
-    console.log("current participant_id = " + participant_id);
+            <button id="consent_button" type="button" name="button" id="buttonConsentForm" class="default_button"
+                onclick="clickStart('page0', 'page1')"> Informed Consent</button><br>
+        </div>
 
 
-    // what we need
-    // category learning train
-    //// stimuli nrs 1:150 to train
-    //// stimuli 50% category 1, 50% category 2
-    //// 
-    // recognition 
-    //// stimuli 50% initially presented (all), 50% new
-    // category learning generalization
-    //// only 150 new items: 1:150 to test
+        <div id="page1" style="display:none;">
+            <h1>Information on tasks and purpose of the study</h4>
+                Today, you are carrying out various tasks with friendly monsters.<br>
+                You are randomly going to be assigned to one of several conditions. <br>
+                Depending on the condition you are in, you are going to carry out a subset of the following tasks:
+                <ul class="centeredtext">
+                    <li><b>Memory:</b> Remember a monster on every trial as precisely as possible</li>
+                    <li><b>Similarity:</b> Use your memory to compare the monster from the current trial to the monster
+                        of
+                        the previous trial; again as precisely as possible</li>
+                    <li><b>Category Learning</b>: The monsters come from different tribes; learn to categorize them into
+                        the
+                        tribes they come from over several trials</li>
+                </ul> <br>
+                The purpose of the study is to gain knowledge about how people mentally represent two-dimensional
+                information.<br>
+                On the next page you will get detailed instructions about the specific combination of tasks you
+                are going to carry out.
+                <br>
 
-    // to start, just use 2D monsters from rep change project
+                To be eligible to participate, you <strong> MUST </strong> meet the following criteria:
+                <ol>
+                    <li>Be between 18 and 35 years of age.</li>
+                    <li>Be a fluent speaker of English.</li>
+                    <!--<li>Have not previously participated in this study.</li>-->
+                </ol>
+                <b style="color:maroon;">Please use a device with a keyboard.
+                    Please do not accept this task if you are using a touch screen device, it will not work!</b><br>
 
+                <h4>How much time will it take and how much can you earn?</h4>
+                The study will take <b>approx 90 minutes</b>.<br>
+                You will be paid <b>£9.80</b> pounds for participation plus a bonus of up to <b>£5.20</b> pounds
+                depending on
+                your performance.<br>
+                Please note that this is going to be a <b>long and challenging </b>study!</b><br>
 
-    var n_categories = 2;
-    var n_trials_train = 150;
-    var n_trials_recog = n_trials_train * 2;
-    var n_trials_generalize = n_trials_train;
+                <h4>Confidentiality</h4>
+                Your participation in this study will remain confidential.
+                Your Prolific ID will NOT be shared with anyone outside the research team.
 
-    const x1_max = 100;
-    const x2_max = 100;
-    var id0 = [];
-    var id1 = []; // diagonal is excluded in information-integration structure
-    var cat0 = [];
-    var cat1 = [];
-    var x = [];
-    var y = [];
+                <h4>Participation and withdrawal</h4>
+                Your participation in this study is completely voluntary and you may refuse to participate<br>
+                or you may choose to withdraw at any time.<br>
+                However, you will only be paid for the participation upon completion<br>
+                and after clicking the button re-directing you to the prolific webpage and storing your completion code.
 
-    counter = 0;
-    for (var i = 1; i <= x1_max; i++) {
-        for (var j = 1; j <= x2_max; j++) {
-            x[counter] = i;
-            y[counter] = j;
-            if (i > j) {
-                id0.push(counter);
-                cat0.push(0);
-                counter += 1;
-            } else if (i < j) {
-                id1.push(counter);
-                cat1.push(1);
-                counter += 1;
-            }
-        }
-    }
-    // generate random sequence of stimuli in both categories
-    const prep0 = Array(id0.length).fill().map((element, index) => index);
-    const prep1 = Array(id1.length).fill().map((element, index) => index);
-    const which_ids_0 = jsPsych.randomization.sampleWithoutReplacement(prep0, n_trials_recog / 2 + n_trials_generalize / 2);
-    const which_ids_1 = jsPsych.randomization.sampleWithoutReplacement(prep1, n_trials_recog / 2 + n_trials_generalize / 2);
-
-
-    stimuli = make_stimuli(n_trials_train, n_trials_recog, n_trials_generalize, which_ids_0, which_ids_1);
-
-    console.log("stimuli[ids_train].length = " + stimuli["ids_train"].length);
-    console.log("stimuli[ids_train] = " + stimuli["ids_train"]);
-    console.log("stimuli[cat_train] = " + stimuli["cat_train"]);
-
-    // randomize train, recog, and generalize stimuli and cat ids
-    both_train = shuffle_ids_and_cats(stimuli["ids_train"], stimuli["cat_train"]);
-    both_lures = shuffle_ids_and_cats(stimuli["ids_lures"], stimuli["cat_lures"]);
-    both_generalize = shuffle_ids_and_cats(stimuli["ids_generalize"], stimuli["cat_generalize"]);
-
-    console.log("ids_lures = " + both_lures["ids"]);
-    console.log("cat_lures = " + both_lures["cat"]);
+                <h4>How to contact the researchers?</h4>
+                If you have questions or concerns about your participation or payment
+                please email the <a href="mailto:mirko.thalmann@tuebingen.mpg.de">researcher</a>
+                or the <a href="mailto:eric.schulz@tuebingen.mpg.de">principal investigator</a>.
 
 
-    var n_recalled;
-    var n_recalled_correctly;
+                <h4>Data protection</h4>
+                Your data will be anonymized and only used in the manner described in our data protection sheet,
+                available <a href="https://kyblab.tuebingen.mpg.de/t-reps/data_protection.pdf" target="_blank">here</a>
+                (please do not fill out this sheet!).
+                The following text box summarizes the main points. Please read it carefully and provide consent
+                below:<br>
+                <br>
+
+                <textarea rows="15" cols="100" readonly>
+                    The processing and use of the collected data occurs in a pseudoanonymized form within the scope of the legally prescribed provisions.
+                    As a general rule, the storage occurs in the form of answered questionnaires, as well as electronic data, for a duration of 10 years or longer, if this is required by the purpose of the study.
+
+                    By providing of further personal data in pseudoanonymized form, collected personal data may be used for the preparation of anonymized
+                    scientific research work and may also be published and used in an anonymized form in medical journals and scientific publications, so that a direct assignment to my person cannot be established.
+
+                    The information obtained during the course of this study may also be sent in an anonymized form to cooperation partners within the scope of
+                    the European General Data Protection Regulation for scientific purposes and to cooperation partners outside of the European Union, i.e. to countries with a lower data protection level (this also applies to the USA).
+
+                    The data collected within the scope of the study can also be used and processed in the future inside of the Max Planck Institute.
+
+                    I was informed about my rights, that at any time:
+
+                    I can withdraw this declaration of consent.
+
+                    I can request information about my stored data and request the correction or blocking of data.
+
+                    By cancellation of my participation in the study,
+                    I can request that any personal data of mine collected until that point are immediately deleted or anonymized.
+
+                    I can request that my personal data are handed out to me or to third parties (if technically feasible).
+
+                    I herewith declare that:
+
+                    I have been adequately informed about the collection and processing of my personal data and rights.
+
+                    I consent to the collection and processing of personal data within the scope of the study and its pseudoanonymized disclosure,
+                    so that only the persons conducting the study can establish a link between the data and my person.
+
+                    Agreement:
+
+                    I agree to participate in this study.
+
+                    I consent to the use of my data described in the Data Protection Information Sheet
+                    and confirm having received a copy of the Data Protection Sheet.
+
+                    I consent to data transfer from the MPI for Biological Cybernetics encrypted database to the project-related collaborators:
+                    inside of the Max Planck Society and affiliated research institutes, or at partnering institutions like the University of Tuebingen.
+			</textarea>
+
+                <br>
+                <br>
+                By selecting the consent option below,
+                you acknowledge that you fulfill all of the participation criteria
+                and you agree to your data being used as described.
+                <br>
+                <br>
+
+                <button type="button" name="button" id="buttonConsentForm" onclick="clickStart('page1', 'page2')">I
+                    consent
+                    to participate</button><br><br>
+
+        </div>
 
 
-    var instructions1 = {
-        type: jsPsychHtmlButtonResponse,
-        stimulus: '<div style="font-size:30px;"><b>INSTRUCTIONS</b><br><br>This is the updating task. <br>This task has two parts: <br>(1) Memorization of the initially presented digits <br>(2) Individually updating selected digits <br><br><br><br><br><br><br><br><br><br><br></div>',
-        choices: ["Next"]
-    };
-    var instructions2 = {
-        type: jsPsychHtmlButtonResponse,
-        stimulus: '<div style="font-size:30px;">In every trial, four digits colored in different colors are presented on the screen. Remember these four digits in the correct order.<br>There will be a series of seven updating steps.<br>At every updating step, one digit is replaced by a different digit.<br>Occasionally, it may be replaced by the same digit already presented previously at that location. <br> In the end of the trial, you are required to recall the last four digits at every location.<br> Please note that the ordering of the digits is important. A recalled digit is only going to be counted as correct if it is recalled in the correct location.<br><br><br><br><br><br><br><br><br><br><br></div>',
-        choices: ["Next"]
-    };
-    var instructions3 = {
-        type: jsPsychHtmlButtonResponse,
-        stimulus: '<div style="font-size:30px;">Recall the digits using the number pad on your keyboard.<br>For example, if the last four digits were 9, 3, 6, 9, please respond "9369".<br><br><br>If you are unsure what has been presented most recently at one or several locations, please guess in these locations.<br><br><br><br><br><br><br><br><br><br><br><br><br></div>',
-        choices: ["Next"]
-    };
-    var instructions4 = {
-        type: jsPsychHtmlButtonResponse,
-        stimulus: '<div style="font-size:30px;">Occasionally, you have to recall the initial set of digits immediately. Again, please recall in the correct order. You get two practice trials to get used to the two versions of the task (immediate recall and recall after the updating steps).<br><br><br><br><br><br><br><br><br><br><br> </div>',
-        choices: ["Start Practice"]
-    };
-    var instructions_test = {
-        type: jsPsychHtmlButtonResponse,
-        stimulus: '<div style="font-size:30px;">These were the two practice trials.<br>The main part of the updating task is going to start now.<br>Good luck.<br><br><br><br><br><br><br><br><br> </div>',
-        choices: ["Start Main Part"]
-    };
+        <div id="page2" style="display:none">
+            <br>
 
 
-    var train_stimuli = [];
-    for (let i = 0; i < 5; i++) { //n_trials_train
-        stim_path = {
-            stimulus: "stimuli/stimulus[" + x[both_train["ids"][i]] + "," + y[both_train["ids"][i]] + "].png",
-            correct_response: ['f', 'j'][both_train["cat"][i]]
+            <h1>Welcome to Planet Rodrak</h1>
+            <br>
+            Today, you find yourself in <b>Planet Rodrak</b>.<br>
+            Your task is to learn which images the alien Mira likes.<br>
+            Possible images could look like the following:
+            <div>
+                <img src="stimuli/stimulus[1,1].png" height="300px">
+                <img src="stimuli/stimulus[100,100].png" height="300px">
+            </div></br>
+            <br>
+            These are just two examples, though.<br>
 
-        };
-        train_stimuli.push(stim_path);
-    }
+            <h1>Instructions</h1>
+            <p>
+                Your session today will be split up into two tasks:
+            </p>
+            <ol>
+                <li>
+                    <b>Mira's preferences:</b>On every trial you are presented with an object.<br>
+                    Your task is to learn which objects Mira likes and which one not.<br>
+                    If you think, Mira likes the object, press the 'F' button on the keyboard.<br>
+                    If you think, Mira does not like the object, press the 'J' button on the keyboard.<br>
+                    You will get help via feedback on every trial.<br>
+                    <b> --> Takes approx. 10 min</b><br>
+                </li>
+                <br>
+                <li>
+                    <b>Recognition:</b>You are going to see the objects presented in 'Mira's preferences' together with
+                    new objects.<br>
+                    Your task is to say if you have seen the respective object presented on a given trial or not as
+                    accurately and quickly as possible.<br>
+                    <b> --> Takes approx. 10 min</b><br>
+                </li>
+                <br>
+                <li>
+                    <b>Mira's preferences reloaded:</b>The task is similar to 'Mira's preferences'.<br>
+                    You again have to say if Mira likes the object or not. However, this time, you will not get any
+                    feedback to sharpen your understanding of Mira's preferences.<br>
+                    Please use again the same response buttons as in the first part:<br>
+                    If you think, Mira likes the object, press the 'F' button on the keyboard.<br>
+                    If you think, Mira does not like the object, press the 'J' button on the keyboard.<br>
+                    <b> --> Takes approx. 10 min</b><br>
+                </li>
+            </ol>
+            <button type="button" name="bbutton" ; onclick="clickStart('page2', 'page1')" ;> Back </button>
+            <button type="button" name="button" ; onclick="clickStart('page2', 'page3')" ;> Check Comprehension
+            </button>
 
-    var fixation = {
-        type: jsPsychHtmlKeyboardResponse,
-        stimulus: '<div style="font-size:60px;">+</div>',
-        choices: "NO_KEYS",
-        trial_duration: 1000,
-    };
+        </div>
 
-    var judge_category = {
-        type: jsPsychImageKeyboardResponse,
-        stimulus: jsPsych.timelineVariable('stimulus'),
-        choices: ['f', 'j'],
-        data: {
-            task: "categorization - train",
-            correct_response: jsPsych.timelineVariable("correct_response")
-        },
-        on_finish: function (data) {
-            data.correct = jsPsych.pluginAPI.compareKeys(data.response, data.correct_response);
-        }
-    }
+        <!--Comprehension check-->
+        <div id="page3" style="display:none">
+            <fieldset>
+                <legend>Please answer a few questions about this study before proceeding</legend>
+                <p style="font-size:100%;color:maroon;"> You will only be directed to the next page if you manage to
+                    answer
+                    all of the questions correctly.</p>
 
-    var feedback = {
-        type: jsPsychHtmlKeyboardResponse,
-        stimulus: function (data) {
-            var is_correct = jsPsych.data.get().last(1).values()[0].correct;
-            console.log("is_correct = " + is_correct);
-            if (is_correct == true) {
-                return ('<div style="font-size:60px;color:green">Correct!</div>')
-            } else if (is_correct == false) {
-                return ('<div style="font-size:60px;color:red">Wrong!</div>')
-            }
-        },
-        choices: "NO_KEYS",
-        trial_duration: 1000,
-    };
-
-    var train_procedure = {
-        timeline: [fixation, judge_category, feedback],
-        timeline_variables: train_stimuli
-    }
-
-
-    timeline = [];
-    timeline.push(train_procedure);
-
-    /* start the experiment */
-    jsPsych.run(timeline);
-
-</script>
+                <fieldset>
+                    <b>What is your goal in the task called 'Mira's preferences'? </b><br>
+                    <label for="q1l1" style="font-weight: normal;"><input type="radio" name="q1" id="l1"><span
+                            id="q1l1">
+                            Say if you like the object or not. </span></label><br>
+                    <label for="q1l2" style="font-weight: normal;"><input type="radio" name="q1" id="icheck1"><span
+                            id="q1icheck1"> Say if Mira likes the presented object or not.
+                        </span></label><br>
+                    <label for="q1l3" style="font-weight: normal;"><input type="radio" name="q1" id="l2"><span
+                            id="q1l2">
+                            Compare the object to the one of the previous trial using the slider response format.
+                        </span></label><br>
+                    <br>
+                </fieldset>
+                <fieldset>
+                    <b>How do you respond in the task called 'Mira's preferences'? </b><br>
+                    <label for="q2l1" style="font-weight: normal;"><input type="radio" name="q2" id="l1" /><span
+                            id="q2l1">
+                            Using the 'F' (= Mira dislikes) and 'J' (= Mira likes) buttons on the keyboard.
+                        </span></label><br>
+                    <label for="q2l2" style="font-weight: normal;"><input type="radio" name="q2" id="l2" /><span
+                            id="q2l2">
+                            Using the right and left mouse buttons </span></label><br>
+                    <label for="q2l3" style="font-weight: normal;"><input type="radio" name="q2" id="icheck2"> <span
+                            id="q2icheck2"> Using the 'F' (= Mira likes) and 'J' (= Mira dislikes) buttons on the
+                            keyboard </span></label><br>
+                    <br>
+                </fieldset>
+                <fieldset>
+                    <b>What is your goal in the recognition task? </b><br>
+                    <label for="q3l1" style="font-weight: normal;"><input type="radio" name="q3" id="l1"><span
+                            id="q3l1">
+                            Say if Mira likes the presented object or not. </span></label><br>
+                    <label for="q3l2" style="font-weight: normal;"><input type="radio" name="q3" id="l2"><span
+                            id="q3l2"></span> Remember the object presented on screen. </span></label><br>
+                    <label for="q3l3" style="font-weight: normal;"><input type="radio" name="q3" id="icheck3"><span
+                            id="q3icheck3"> Say if you have seen the presented object before or not. </span></label><br>
+                    <br>
+                </fieldset>
+                <fieldset>
+                    <b>How do you respond in the recognition task? </b><br>
+                    <label for="q4l1" style="font-weight: normal;"><input type="radio" name="q4" id="l1" /><span
+                            id="q4l1"> Using keys 1-4 on the keyboard. 4 is like, 1 is dislike </span></label><br>
+                    <label for="q4l2" style="font-weight: normal;"><input type="radio" name="q4" id="l2" /><span
+                            id="q4l2"> Using the 'F' (= not seen before) and 'J' (= seen before) buttons on the
+                            keyboard. </span></label><br>
+                    <label for="q4l3" style="font-weight: normal;"><input type="radio" name="q4" id="icheck4"> <span
+                            id="q4icheck4"> Using the 'F' (= seen before) and 'J' (= not seen before) buttons on the
+                            keyboard. </span></label><br>
+                    <br>
+                </fieldset>
+                <fieldset>
+                    <b> How long is the experiment going to last approximately? </b><br>
+                    <label for="q5l1" style="font-weight: normal;"><input type="radio" name="q5" id="l1"><span
+                            id="q5l1">
+                            Roughly 10 minutes </span></label><br>
+                    <label for="q5l2" style="font-weight: normal;"><input type="radio" name="q5" id='l2'><span
+                            id="q5l2">
+                            Roughly 60 minutes </span></label><br>
+                    <label for="q5l3" style="font-weight: normal;"><input type="radio" name="q5" id='icheck5'><span
+                            id="q5icheck5">
+                            Roughly 30 minutes </span></label><br>
+                    <label for="q5l4" style="font-weight: normal;"><input type="radio" name="q5" id='l3'><span
+                            id="q5l3">
+                            Roughly 120 minutes </span></label><br>
+                </fieldset>
+            </fieldset>
+            <br>
+            <button type="button" name="button" ; onclick="clickStart('page3','page2')" ;> Back </button>
+            <button type="button" name="button" ; onclick="instructioncheck('page3', 'page2')" ;>
+                <span id="check"> Check Answers </span>
+            </button>
+        </div>
+    </div>
+</body>
 
 </html>
