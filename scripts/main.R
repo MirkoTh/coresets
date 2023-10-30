@@ -19,7 +19,7 @@ walk(path_load, source)
 # squared structure as in rep change project
 # information integration condition using the identity function as decision boundary
 
-# squares
+# information integration
 x1 <- seq(1, 6, by = 1)
 x2 <- seq(1, 6, by = 1)
 tbl_x_ii <- crossing(x1, x2)
@@ -430,6 +430,8 @@ for (i in 1:length(l_tbl_important_up)) {
 }
 
 saveRDS(l_tbl_up_and_down, "data/l_tbl_up_and_down.RDS")
+l_tbl_up_and_down <- readRDS("data/l_tbl_up_and_down.RDS")
+
 
 
 plot_grid(tbl_up_and_down)
