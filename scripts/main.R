@@ -472,6 +472,13 @@ grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance, n
 # 15 reps: 
 # 20 reps: 20
 
+# data required to put the model-recovery into a separate file:
+# tbl_imb_weighted
+# l_tbl_up_and_down
+l_tbl_up_and_down <- readRDS("data/l_tbl_up_and_down.RDS")
+tbl_transfer
+
+
 
 plot_grid(tbl_imb_weighted)
 plot_grid(tbl_up_and_down)
