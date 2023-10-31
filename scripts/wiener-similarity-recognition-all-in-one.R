@@ -169,8 +169,6 @@ l_recovery_results <- future_map(
   params_gen = params_gen,
   .progress = TRUE, .options = furrr_options(seed = TRUE)
 )  
-l_recovery_results[[1]]
-
 
 file_paths <- str_c("data/representation-and-decision/", dir("data/representation-and-decision/"))
 l_recovery_results <- map(file_paths, readRDS)
@@ -214,7 +212,7 @@ ggplot(tbl_lls_long, aes(value, group = name)) +
   geom_label(
     data = tbl_recovered_agg, aes(
       x = mean(tbl_lls_long$value), 
-      y = tbl_recovered_agg$n[1]/4, 
+      y = tbl_recovered_agg$n[1]/6, 
       label = str_c("p (recov.) = ", round(mean_is_recovered_bic, 2))
     )
   ) + facet_grid(name ~ n_reps) +

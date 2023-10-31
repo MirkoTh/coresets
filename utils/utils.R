@@ -659,3 +659,31 @@ ll_recognition_1_slope <- function(x, tbl_hotspots, tbl_strat, tbl_test, sim_whi
   
   return(neg2ll)
 }
+
+
+sample_from_grid <- function(tbl_x, n_trials_total) {
+  #' @description sample x from bivariate normal for n_trials_total times
+  #' @return all sampled data points as a tbl
+  #'  
+  n_stim <- tbl_x_ii %>% count(category)
+  n_stimulus_reps <- tibble(
+    category = n_stim$category,
+    n = (n_trials_total / 2) / n_stim$n
+  )
+  tbl_x_ii <- tbl_x_ii %>% left_join(n_stimulus_reps, by = "category")
+  
+  overlap <- 1
+  # do not allow samples to come from wrong category
+  while(overlap > 0) {
+    l_samples_ii <- pmap(tbl_x_ii[, c("x1", "x2", "category", "n")], sample_2d_stimuli, sd = .075)
+    tbl_samples_ii <- reduce(l_samples_ii, rbind)
+    tbl_overlap <- tbl_samples_ii %>% group_by(category) %>%
+      count(cat_wrong_1 = x1 >= x2, cat_wrong_0 = x2 >= x1) %>%
+      pivot_longer(cols = c(cat_wrong_0, cat_wrong_1)) %>%
+      mutate(cat_wrong = str_extract(name, "[0-9]$")) %>%
+      filter(value & as.numeric(as.character(category)) == cat_wrong)
+    if (nrow(tbl_overlap) == 0) {overlap <- 0}
+  }
+  tbl_samples_ii <- tbl_samples_ii %>%
+    mutate(trial_id = sample(1:nrow(.), nrow(.)))
+}
