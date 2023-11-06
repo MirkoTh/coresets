@@ -186,7 +186,7 @@ add_sample <- function(tbl_new_sample, tbl_base, params, tbl_transfer, n_feat, d
   f_likelihood(
     params, tbl_transfer, 
     tbl_x = rbind(tbl_base, tbl_new_sample) %>% mutate(trial_id = 1:(nrow(tbl_base) + 1)),
-    n_feat = 2, d_measure = 1, lo = lo, hi = hi
+    n_feat = n_feat, d_measure = d_measure, lo = lo, hi = hi
   )
 }
 
@@ -195,13 +195,14 @@ remove_sample <- function(rwn_remove, tbl_base, params, tbl_transfer, n_feat, d_
   #' @description evaluate likelihood on transfer/test set when one training example is removed
   f_likelihood(
     params, tbl_transfer, tbl_x = tbl_base[-rwn_remove, ] %>% mutate(trial_id = 1:(nrow(tbl_base) - 1)),
-    n_feat = 2, d_measure = 1, lo = lo, hi = hi
+    n_feat = n_feat, d_measure = d_measure, lo = lo, hi = hi
   )
 }
 
 
 importance_upsampling <- function(tbl_importance, tbl_imb_plus, params, tbl_transfer, n_feat, d_measure, lo, hi, n_add = 10) {
   #' @description add n_add most important upsampled data points to the training set
+  #' @param tbl_importance the data points to upsample from
   
   
   l_new_samples <- split(tbl_importance %>% dplyr::select(-trial_id), tbl_importance$trial_id)
@@ -233,20 +234,19 @@ importance_upsampling <- function(tbl_importance, tbl_imb_plus, params, tbl_tran
 }
 
 
-importance_downsampling <- function(tbl_imb, params, tbl_transfer, n_feat, d_measure, lo, hi, cat_down, n_keep_max = 10) {
+importance_downsampling <- function(tbl_drop, params, tbl_transfer, n_feat, d_measure, lo, hi, cat_down, n_keep_max = 10) {
   #' @description remove n_keep least important upsampled data points from the training set
   
   future::plan(multisession, workers = future::availableCores() - 2)
   # sequential importance sampling
-  tbl_drop <- tbl_imb
-  
+
   l_tbl_drop <- list()
   
   
   n_keep_min <- 0
-  nrow_drop <- nrow(tbl_drop %>% filter(category == cat_down))
+  nrow_drop <- nrow(tbl_drop %>% filter(category %in% cat_down))
   while (nrow_drop > n_keep_min) {
-    rows_to_drop <- which(tbl_drop$category == cat_down)
+    rows_to_drop <- which(tbl_drop$category %in% cat_down)
     v_importance <- future_map_dbl(
       rows_to_drop, remove_sample, tbl_base = tbl_drop, params = params, 
       tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1,
@@ -259,7 +259,7 @@ importance_downsampling <- function(tbl_imb, params, tbl_transfer, n_feat, d_mea
     # exclude sampled points from sampling set
     idx_chosen_point <- which.min(tbl_drop$importance)
     tbl_drop <- tbl_drop[-idx_chosen_point,]
-    nrow_drop <- nrow(tbl_drop %>% filter(category == cat_down))
+    nrow_drop <- nrow(tbl_drop %>% filter(category %in% cat_down))
     if (nrow_drop <= n_keep_max){
       l_tbl_drop[[nrow_drop]] <- tbl_drop
     }

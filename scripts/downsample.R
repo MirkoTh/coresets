@@ -139,7 +139,40 @@ params_fin[["tf"]] <- results_pre$par
 # throw out less important points up to K ---------------------------------
 
 
+cats_down <- c(0, 1)
+cols_req <- c("x1", "x2", "category", "response")
 
+n_unique_per_category <- 10
+l_tbl_important_down <- list()
+t_start <- Sys.time()
+l_tbl_important_down <- importance_downsampling(
+  tbl_train[, cols_req], params_fin$tf, 
+  tbl_train %>% mutate(response = category), n_feat = 2, d_measure = 1, 
+  lo = lo[1:3], hi = hi[1:3], cat_down = cats_down, n_keep_max = n_unique_per_category
+)
+t_end <- Sys.time()
+round(t_end - t_start, 1)
+
+
+ggplot(tbl_drop, aes(x1, x2)) + geom_label(aes(label = rank_importance))
+
+
+tbl_important_down <- l_tbl_important_down[[n_unique_per_category]]
+
+l_tbl_up_and_down <- list()
+l_tbl_changes_up <- list()
+l_tbl_changes_down <- list()
+
+
+for (i in 1:length(l_tbl_important_up)) {
+  tbl_up_and_down <- rbind(l_tbl_important_up[[i]], l_tbl_important_down[[i + 3]] %>% dplyr::select(-c(importance, rank_importance)))
+  l_tbl_changes_up[[i]] <- mark_changes(l_tbl_important_up[[i]], tbl_imb_weighted %>% mutate(cat_structure = "Information Integration"))
+  l_tbl_changes_down[[i]] <- mark_changes(l_tbl_important_down[[i + 3]], tbl_imb_weighted %>% mutate(cat_structure = "Information Integration"))
+  l_tbl_up_and_down[[i]] <- l_tbl_changes_up[[i]] %>% filter(is_new) %>%
+    rbind(l_tbl_changes_down[[i]] %>% filter(!is_dropped & category == 0)) %>%
+    rbind(tbl_clusters %>% filter(category == 1) %>% dplyr::select(x1, x2, category) %>% mutate(is_new = FALSE, is_dropped = FALSE))
+  
+}
 
 
 
