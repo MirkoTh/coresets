@@ -28,10 +28,20 @@ walk(path_load, source)
 # generate samples from two categories (category structure: inf. int.)
 # half of the data is used for cl training, half for cl transfer and for item recognition
 # fit plain-vanilla gcm on training responses and keep parameters
-# only keep K-most important data points per category (vary capacity K from 1 to 7)
+# only keep K-most important data points per category (vary K from 1 to 7)
 
 # choice model recovery on on transfer set (downsampling training set, full training set, full training set with forgetting)
 # rt model recovery on recognition responses (presented data plus additionally important points)
+
+# model comparison:
+# gcm has to be fitted on transfer set, train set can be seen as part of the model
+# why? it needs to compute the pairwise similarities between all observations.
+# which is not possible in the train set
+# svm can be fitted on transfer set as well (assuming that performance stabilized after training)
+# then, we do not really have a hold-out test set to compare the models
+# but we can just use bic/aic/BF on the transfer set, that should work
+
+
 
 
 
@@ -139,45 +149,53 @@ params_fin[["tf"]] <- results_pre$par
 # throw out less important points up to K ---------------------------------
 
 
-cats_down <- c(0, 1)
 cols_req <- c("x1", "x2", "category", "response")
+tbl_transfer_backup <- tbl_transfer
+tbl_transfer <- tbl_train %>% mutate(response = category)
 
-n_unique_per_category <- 10
 l_tbl_important_down <- list()
 t_start <- Sys.time()
 l_tbl_important_down <- importance_downsampling(
   tbl_train[, cols_req], params_fin$tf, 
   tbl_train %>% mutate(response = category), n_feat = 2, d_measure = 1, 
-  lo = lo[1:3], hi = hi[1:3], cat_down = cats_down, n_keep_max = n_unique_per_category
+  lo = lo[1:3], hi = hi[1:3], cat_down = 0, n_keep_max = n_unique_per_category
 )
 t_end <- Sys.time()
 round(t_end - t_start, 1)
 
-
-ggplot(tbl_drop, aes(x1, x2)) + geom_label(aes(label = rank_importance))
-
-
-tbl_important_down <- l_tbl_important_down[[n_unique_per_category]]
-
-l_tbl_up_and_down <- list()
-l_tbl_changes_up <- list()
-l_tbl_changes_down <- list()
-
-
-for (i in 1:length(l_tbl_important_up)) {
-  tbl_up_and_down <- rbind(l_tbl_important_up[[i]], l_tbl_important_down[[i + 3]] %>% dplyr::select(-c(importance, rank_importance)))
-  l_tbl_changes_up[[i]] <- mark_changes(l_tbl_important_up[[i]], tbl_imb_weighted %>% mutate(cat_structure = "Information Integration"))
-  l_tbl_changes_down[[i]] <- mark_changes(l_tbl_important_down[[i + 3]], tbl_imb_weighted %>% mutate(cat_structure = "Information Integration"))
-  l_tbl_up_and_down[[i]] <- l_tbl_changes_up[[i]] %>% filter(is_new) %>%
-    rbind(l_tbl_changes_down[[i]] %>% filter(!is_dropped & category == 0)) %>%
-    rbind(tbl_clusters %>% filter(category == 1) %>% dplyr::select(x1, x2, category) %>% mutate(is_new = FALSE, is_dropped = FALSE))
-  
-}
+ggplot(tbl_drop, aes(x1, x2)) +
+  geom_label(aes(label = rank_importance))
+ggplot(l_tbl_drop[[5]], aes(x1, x2)) +
+  geom_label(aes(label = rank_importance)) +
+  geom_abline()
 
 
 
 
+# Fitting SVM to the Training set 
+install.packages('e1071') 
+library(e1071)
 
+
+remove_sample
+
+m_svm <- svm(
+  response ~ x1 + x2, 
+  data = tbl_train, 
+  type = "C-classification", 
+  kernel = "linear", 
+  probability = TRUE
+  )
+
+summary(m_svm)
+
+pred_cat <- predict(m_svm, tbl_train)
+predict(m_svm, tbl_train, probability = TRUE)
+
+tbl_fully_crossed <- crossing(x1 = seq(0, 6, by = .1), x2 = seq(0, 6, by = .1))
+tbl_fully_crossed$pred_svm <- predict(m_svm, tbl_fully_crossed)
+ggplot(tbl_fully_crossed, aes(x1, x2)) +
+  geom_point(aes(color = pred_svm))
 
 
 

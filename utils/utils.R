@@ -199,6 +199,30 @@ remove_sample <- function(rwn_remove, tbl_base, params, tbl_transfer, n_feat, d_
   )
 }
 
+remove_sample_general <- function(rwn_remove, tbl_base, m, tbl_transfer) {
+  #' @description evaluate likelihood on transfer/test set when one training example is removed
+  #' @param rwn_remove the row from the tbl_base to remove
+  #' @param m the model including details about it
+  #' @param tbl_transfer the data set to evaluate the model upon
+  if (m$name == "gcm") {
+    loglik <- f_likelihood(
+      m$params, tbl_transfer, tbl_x = tbl_base[-rwn_remove, ] %>% mutate(trial_id = 1:(nrow(tbl_base) - 1)),
+      n_feat = m$n_feat, d_measure = m$d_measure, lo = m$lo, hi = m$hi
+    )
+  } else if (m$name == "svm") {
+    # re-fit svm
+    m$model <- svm(
+      response ~ x1 + x2, data = tbl_base[-rwn_remove], type = "C-classification", 
+      kernel = "linear", probability = TRUE
+    )
+    y_preds <- predict(m$model, tbl_transfer, probability = TRUE)
+    lik <- pmap_dbl(cbind(attr(y_preds, "probabilities") %>% as.data.frame(), tbl_transfer$category), ~ c(..1, ..2)[..3])
+    loglik <- sum(log(lik))
+  }
+  return(loglik)
+}
+
+
 
 importance_upsampling <- function(tbl_importance, tbl_imb_plus, params, tbl_transfer, n_feat, d_measure, lo, hi, n_add = 10) {
   #' @description add n_add most important upsampled data points to the training set
@@ -239,7 +263,7 @@ importance_downsampling <- function(tbl_drop, params, tbl_transfer, n_feat, d_me
   
   future::plan(multisession, workers = future::availableCores() - 2)
   # sequential importance sampling
-
+  
   l_tbl_drop <- list()
   
   
@@ -249,7 +273,7 @@ importance_downsampling <- function(tbl_drop, params, tbl_transfer, n_feat, d_me
     rows_to_drop <- which(tbl_drop$category %in% cat_down)
     v_importance <- future_map_dbl(
       rows_to_drop, remove_sample, tbl_base = tbl_drop, params = params, 
-      tbl_transfer = tbl_transfer, n_feat = 2, d_measure = 1,
+      tbl_transfer = tbl_transfer, n_feat = n_feat, d_measure = d_measure,
       f_likelihood = gcm_likelihood_no_forgetting, lo = lo, hi = hi
     )
     tbl_drop$importance <- max(v_importance + 1)
@@ -558,7 +582,7 @@ wiener_reg1_delta_log <- function(x, my_tbl) {
   #' @description Wiener LL with linear regression on drift rate
   #' only regressing drift rate on one similarity
   #' @return the -2 * sum of the LL
-
+  
   
   alpha <- x[["alpha"]]
   tau <- x[["tau"]]
