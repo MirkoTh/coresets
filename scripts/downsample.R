@@ -153,21 +153,34 @@ cols_req <- c("x1", "x2", "category", "response")
 tbl_transfer_backup <- tbl_transfer
 tbl_transfer <- tbl_train %>% mutate(response = category)
 
+
+m_gcm <- list()
+m_gcm$name <- "gcm"
+m_gcm$f_likelihood <- gcm_likelihood_no_forgetting
+m_gcm$params <- params_fin$tf
+m_gcm$n_feat <- 2
+m_gcm$d_measure <- 1
+m_gcm$lo <- lo[1:3]
+m_gcm$hi <- hi[1:3]
+
 l_tbl_important_down <- list()
 t_start <- Sys.time()
 l_tbl_important_down <- importance_downsampling(
-  tbl_train[, cols_req], params_fin$tf, 
-  tbl_train %>% mutate(response = category), n_feat = 2, d_measure = 1, 
-  lo = lo[1:3], hi = hi[1:3], cat_down = 0, n_keep_max = n_unique_per_category
+  tbl_train[, cols_req], m_gcm, 
+  tbl_train %>% mutate(response = category),
+  cat_down = 0, n_keep_max = 10#n_unique_per_category
 )
 t_end <- Sys.time()
 round(t_end - t_start, 1)
 
 ggplot(tbl_drop, aes(x1, x2)) +
-  geom_label(aes(label = rank_importance))
-ggplot(l_tbl_drop[[5]], aes(x1, x2)) +
   geom_label(aes(label = rank_importance)) +
-  geom_abline()
+  geom_abline() +
+  coord_cartesian(xlim = c(0, 7), ylim = c(0, 7))
+ggplot(l_tbl_important_down[[10]], aes(x1, x2)) +
+  geom_label(aes(label = rank_importance)) +
+  geom_abline() +
+  coord_cartesian(xlim = c(0, 7), ylim = c(0, 7))
 
 
 
@@ -176,11 +189,18 @@ ggplot(l_tbl_drop[[5]], aes(x1, x2)) +
 install.packages('e1071') 
 library(e1071)
 
+m_svm <- list()
+m_svm$name <- "svm"
+m_svm$model <- m_svm
 
-remove_sample
+importance_downsampling(
+  tbl_train[, cols_req], m_svm,
+  tbl_train %>% mutate(response = category),
+  cat_down = 0, n_keep_max = 10
+)
 
 m_svm <- svm(
-  response ~ x1 + x2, 
+  category ~ x1 + x2, 
   data = tbl_train, 
   type = "C-classification", 
   kernel = "linear", 

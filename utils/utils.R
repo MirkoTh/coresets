@@ -205,21 +205,21 @@ remove_sample_general <- function(rwn_remove, tbl_base, m, tbl_transfer) {
   #' @param m the model including details about it
   #' @param tbl_transfer the data set to evaluate the model upon
   if (m$name == "gcm") {
-    loglik <- f_likelihood(
+    neg2loglik <- m$f_likelihood(
       m$params, tbl_transfer, tbl_x = tbl_base[-rwn_remove, ] %>% mutate(trial_id = 1:(nrow(tbl_base) - 1)),
       n_feat = m$n_feat, d_measure = m$d_measure, lo = m$lo, hi = m$hi
     )
   } else if (m$name == "svm") {
     # re-fit svm
     m$model <- svm(
-      response ~ x1 + x2, data = tbl_base[-rwn_remove], type = "C-classification", 
+      response ~ x1 + x2, data = tbl_base[-rwn_remove, ], type = "C-classification", 
       kernel = "linear", probability = TRUE
     )
     y_preds <- predict(m$model, tbl_transfer, probability = TRUE)
     lik <- pmap_dbl(cbind(attr(y_preds, "probabilities") %>% as.data.frame(), tbl_transfer$category), ~ c(..1, ..2)[..3])
-    loglik <- sum(log(lik))
+    neg2loglik <- -2*sum(log(lik))
   }
-  return(loglik)
+  return(neg2loglik)
 }
 
 
@@ -258,7 +258,7 @@ importance_upsampling <- function(tbl_importance, tbl_imb_plus, params, tbl_tran
 }
 
 
-importance_downsampling <- function(tbl_drop, params, tbl_transfer, n_feat, d_measure, lo, hi, cat_down, n_keep_max = 10) {
+importance_downsampling <- function(tbl_drop, m, tbl_transfer, cat_down, n_keep_max = 10) {
   #' @description remove n_keep least important upsampled data points from the training set
   
   future::plan(multisession, workers = future::availableCores() - 2)
@@ -272,15 +272,16 @@ importance_downsampling <- function(tbl_drop, params, tbl_transfer, n_feat, d_me
   while (nrow_drop > n_keep_min) {
     rows_to_drop <- which(tbl_drop$category %in% cat_down)
     v_importance <- future_map_dbl(
-      rows_to_drop, remove_sample, tbl_base = tbl_drop, params = params, 
-      tbl_transfer = tbl_transfer, n_feat = n_feat, d_measure = d_measure,
-      f_likelihood = gcm_likelihood_no_forgetting, lo = lo, hi = hi
+      rows_to_drop, remove_sample_general, tbl_base = tbl_drop, m = m, 
+      tbl_transfer = tbl_transfer,
+      .options = furrr_options(seed = TRUE)
     )
     tbl_drop$importance <- max(v_importance + 1)
     tbl_drop$importance[rows_to_drop] <- v_importance
     # pick best imagined data point
     tbl_drop <- tbl_drop %>% mutate(rank_importance = rank(importance, ties.method = "min"))
-    # exclude sampled points from sampling set
+    # we want to throw out that data point, which changes the -2LL the least
+    # the lowest -2LL refers to the best prediction after exclusion of one data point
     idx_chosen_point <- which.min(tbl_drop$importance)
     tbl_drop <- tbl_drop[-idx_chosen_point,]
     nrow_drop <- nrow(tbl_drop %>% filter(category %in% cat_down))
@@ -288,6 +289,7 @@ importance_downsampling <- function(tbl_drop, params, tbl_transfer, n_feat, d_me
       l_tbl_drop[[nrow_drop]] <- tbl_drop
     }
     if (nrow_drop == 1) break
+    cat("another iteration\n")
   }
   
   future::plan("default")

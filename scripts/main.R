@@ -402,12 +402,21 @@ plot_grid(tbl_important_up)
 # downsampling only on majority category
 # takes about 6.5 mins for 150 stimuli in majority category on laptop
 # takes about 8.4 mins for 150 stimuli in majority category on lab computer
+m_gcm <- list()
+m_gcm$name <- "gcm"
+m_gcm$f_likelihood <- gcm_likelihood_no_forgetting
+m_gcm$params <- params_fin$tf
+m_gcm$n_feat <- 2
+m_gcm$d_measure <- 1
+m_gcm$lo <- lo[1:3]
+m_gcm$hi <- hi[1:3]
+
 l_tbl_important_down <- list()
 t_start <- Sys.time()
 l_tbl_important_down <- importance_downsampling(
-  tbl_imb_weighted[, cols_req], params_fin$tf, 
-  tbl_transfer %>% mutate(response = category), n_feat = 2, d_measure = 1, 
-  lo = lo[1:3], hi = hi[1:3], cat_down = 0, n_keep_max = n_unique_per_category
+  tbl_imb_weighted[, cols_req], m_gcm, 
+  tbl_transfer %>% mutate(response = category),
+  cat_down = 0, n_keep_max = n_unique_per_category
 )
 t_end <- Sys.time()
 round(t_end - t_start, 1)
