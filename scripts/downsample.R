@@ -1,9 +1,10 @@
 # Load packages and utils -------------------------------------------------
-
+devtools::install_github("r-lib/conflicted")
 
 rm(list = ls())
 set.seed(43995)
 
+library(conflicted)
 library(tidyverse)
 library(grid)
 library(gridExtra)
