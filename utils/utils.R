@@ -63,7 +63,7 @@ f_similarity <- function(x1, x2, w, c, x_new, d_measure) {
 f_similarity_cat <- function(x, w, c, delta, x_new, d_measure) {
   #' @description helper function calculating similarities for all items
   #' within a given category
-  x$lag <- abs(x$trial_id - max(x$trial_id))
+  x$lag <- abs(x$trial_id - max(x$trial_id)) + x_new$trial_id
   x$prop_decay <- exp(- (delta * x$lag))
   sims <- pmap_dbl(x[, c("x1", "x2")], f_similarity, w, c, x_new, d_measure)
   return(sims*x$prop_decay)
@@ -132,8 +132,14 @@ category_probs <- function(x, tbl_transfer, tbl_x, n_feat, d_measure, lo, hi) {
   #' @return negative 2 * summed log likelihood
   #' 
   x <- pmap(list(x, lo, hi), upper_and_lower_bounds_revert)
-  l_transfer_x <- split(tbl_transfer[, c("x1", "x2")], 1:nrow(tbl_transfer))
-  l_category_probs <- map(l_transfer_x, gcm_base, tbl_x = tbl_x, n_feat = n_feat, c = x[["c"]], w = x[["w"]], bias = x[["bias"]], delta = ifelse(is.null(x[["delta"]]), 0, x[["delta"]]), d_measure = d_measure)
+  l_transfer_x <- split(tbl_transfer[, c("x1", "x2", "trial_id")], 1:nrow(tbl_transfer))
+  l_category_probs <- map(
+    l_transfer_x, gcm_base, 
+    tbl_x = tbl_x, n_feat = n_feat, 
+    c = x[["c"]], w = x[["w"]], bias = x[["bias"]], 
+    delta = ifelse(is.null(x[["delta"]]), 0, x[["delta"]]), 
+    d_measure = d_measure
+  )
   tbl_probs <- as.data.frame(reduce(l_category_probs, rbind)) %>% mutate(response = tbl_transfer$response)
   tbl_probs$prob_correct <- pmap_dbl(
     tbl_probs[, c("0", "1", "response")],

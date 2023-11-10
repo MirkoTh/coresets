@@ -72,6 +72,8 @@ tbl_samples_ii <- sample_from_grid(tbl_x_ii, n_trials_total, my_sd = .04)
 idx_train <- sample(1:n_trials_total, n_trials_total/2)
 tbl_train <- tbl_samples_ii[idx_train, ]
 tbl_transfer <- tbl_samples_ii[!(1:n_trials_total %in% idx_train), ]
+tbl_train$trial_id <- sample(1:nrow(tbl_train), nrow(tbl_train), replace = FALSE)
+tbl_transfer$trial_id <- sample(1:nrow(tbl_transfer), nrow(tbl_transfer), replace = FALSE)
 
 plot_grid(tbl_train) + geom_abline()
 
@@ -293,6 +295,7 @@ tbl_fully_crossed <- crossing(x1 = seq(0, 6, by = .25), x2 = seq(0, 6, by = .25)
     # to evaluate probability of a correct response
     response = category
   )
+tbl_fully_crossed$trial_id <- sample(1:nrow(tbl_fully_crossed), nrow(tbl_fully_crossed), replace = FALSE)
 
 
 
@@ -319,7 +322,7 @@ l_preds_gcm_downsample <- map(
 
 tbl_preds_gcm_downsample <- reduce(l_preds_gcm_downsample, cbind) %>%
   as.data.frame()
-colnames(tbl_preds_gcm_downsample) <- 1:10
+colnames(tbl_preds_gcm_downsample) <- str_c("keep = ", 1:10)
 
 
 
@@ -345,7 +348,7 @@ ggplot(tbl_fully_crossed %>% pivot_longer(cols = c(pred_svm, pred_gcm, pred_gcm_
 
 
 
-m_cor <- cor(tbl_fully_crossed[, c("pred_svm", "pred_gcm", "pred_gcm_forgetful", "pred_nb", 1:10)])
+m_cor <- cor(tbl_fully_crossed[, c("pred_svm", "pred_gcm", "pred_gcm_forgetful", "pred_nb", str_c("keep = ", 1:10))])
 
 tbl_cors <- tibble(
   model_1 = "gcm",
@@ -353,20 +356,24 @@ tbl_cors <- tibble(
   cor = m_cor[2, ]
 ) %>% mutate(
   model_2 = fct_inorder(model_2, ordered = TRUE),
-  model_2 = fct_relevel(model_2, "pred_gcm", after = Inf),
   model_2 = fct_relevel(model_2, "pred_gcm_forgetful", after = Inf),
+  model_2 = fct_relevel(model_2, "pred_gcm", after = Inf),
   model_2 = fct_relevel(model_2, "pred_svm", after = Inf),
-  model_2 = fct_relevel(model_2, "pred_nb", after = Inf)
+  model_2 = fct_relevel(model_2, "pred_nb", after = Inf),
+  model_2 = fct_recode(model_2, "GCM Forget" = "pred_gcm_forgetful"),
+  model_2 = fct_recode(model_2, "GCM Base" = "pred_gcm"),
+  model_2 = fct_recode(model_2, "Rule" = "pred_svm"),
+  model_2 = fct_recode(model_2, "Prototype" = "pred_nb")
 )
 
-ggplot(tbl_cors, aes(model_2, cor, group = 1)) +
+ggplot(tbl_cors %>% filter(model_2 %in% c(str_c("keep = ", 1:10), "GCM Forget", "GCM Base")), aes(model_2, cor, group = 1)) +
   geom_line() +
   geom_point(color = "white", size = 3) +
   geom_point() + 
   theme_bw() +
   scale_x_discrete(expand = c(0.02, 0)) +
   scale_y_continuous(expand = c(0.01, 0)) +
-  labs(x = "Model 2", y = "cor (GCM Base)") +
+  labs(x = "Model", y = "cor (GCM Base)") +
   theme(
     strip.background = element_rect(fill = "white"),
     text = element_text(size = 16),
