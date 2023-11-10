@@ -266,7 +266,7 @@ importance_downsampling <- function(tbl_drop, m, tbl_transfer, cat_down, n_keep_
   
   l_tbl_drop <- list()
   
-  
+  n_start <- nrow(tbl_drop)
   n_keep_min <- 0
   nrow_drop <- nrow(tbl_drop %>% filter(category %in% cat_down))
   while (nrow_drop > n_keep_min) {
@@ -289,7 +289,7 @@ importance_downsampling <- function(tbl_drop, m, tbl_transfer, cat_down, n_keep_
       l_tbl_drop[[nrow_drop]] <- tbl_drop
     }
     if (nrow_drop == 1) break
-    cat("another iteration\n")
+    cat(str_c("iteration ", n_start - nrow(tbl_drop), "\n"))
   }
   
   future::plan("default")
@@ -687,7 +687,7 @@ ll_recognition_1_slope <- function(x, tbl_hotspots, tbl_strat, tbl_test, sim_whi
 }
 
 
-sample_from_grid <- function(tbl_x, n_trials_total) {
+sample_from_grid <- function(tbl_x, n_trials_total, my_sd) {
   #' @description sample x from bivariate normal for n_trials_total times
   #' @return all sampled data points as a tbl
   #'  
@@ -701,7 +701,7 @@ sample_from_grid <- function(tbl_x, n_trials_total) {
   overlap <- 1
   # do not allow samples to come from wrong category
   while(overlap > 0) {
-    l_samples <- pmap(tbl_x[, c("x1", "x2", "category", "n")], sample_2d_stimuli, sd = .075)
+    l_samples <- pmap(tbl_x[, c("x1", "x2", "category", "n")], sample_2d_stimuli, sd = my_sd)
     tbl_samples <- reduce(l_samples, rbind)
     tbl_overlap <- tbl_samples %>% group_by(category) %>%
       count(cat_wrong_1 = x1 >= x2, cat_wrong_0 = x2 >= x1) %>%
