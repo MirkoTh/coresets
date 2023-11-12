@@ -7,6 +7,7 @@ set.seed(43995)
 library(conflicted)
 library(docstring)
 library(tidyverse)
+conflicts_prefer(dplyr::filter())
 library(grid)
 library(gridExtra)
 library(smotefamily)
@@ -18,6 +19,9 @@ library(e1071)
 
 path_load <- c("utils/utils.R")
 walk(path_load, source)
+
+is_fitting <- TRUE
+
 
 # training set
 # transfer set = training set, because people extract important points from observed data
@@ -84,6 +88,14 @@ plot_grid(tbl_transfer) + geom_abline()
 tbl_train <- simulate_responses(tbl_train)
 tbl_transfer <- simulate_responses(tbl_transfer)
 
+if (is_fitting) {
+  saveRDS(tbl_train, file = "data/tbl_train.RDS")
+  saveRDS(tbl_transfer, file = "data/tbl_transfer.RDS")
+} else if (!is_fitting) {
+  tbl_train <- readRDS(file = "data/tbl_train.RDS")
+  tbl_transfer <- readRDS(file = "data/tbl_transfer.RDS")
+}
+
 n_bins <- 5
 tbl_train %>% 
   mutate(x1_cut = cut(x1, n_bins), x2_cut = cut(x2, n_bins)) %>%
@@ -148,7 +160,6 @@ params_fin <- list()
 params_fin[["not_tf"]] <- pmap_dbl(list(results_pre$par, lo[1:3], hi[1:3]), upper_and_lower_bounds_revert)
 params_fin[["tf"]] <- results_pre$par
 
-saveRDS()
 
 
 # fit forgetful gcm on simulated cl training choices ----------------------
@@ -180,6 +191,21 @@ round(t_end - t_start, 1)
 params_fin_forget <- list()
 params_fin_forget[["not_tf"]] <- pmap_dbl(list(results_forget$par, lo, hi), upper_and_lower_bounds_revert)
 params_fin_forget[["tf"]] <- results_forget$par
+
+
+
+# save gcms, because they take some time to be fit
+
+if (is_fitting) {
+  saveRDS(params_fin, file = "data/params_fin_gcm.RDS")
+  saveRDS(params_fin_forget, file = "data/params_fin_gcm_forget.RDS")
+} else if (!is_fitting) {
+  params_fin <- readRDS(file = "data/params_fin_gcm.RDS")
+  params_fin_forget <- readRDS(file = "data/params_fin_gcm_forget.RDS")
+}
+
+
+
 
 # fit svm on simulated cl training choices --------------------------------
 
@@ -217,11 +243,7 @@ m_nb <- naiveBayes(response ~ x1 + x2, data = tbl_train)
 # throw out less important points up to K ---------------------------------
 
 
-plot_grid(tbl_train) + geom_abline()
 cols_req <- c("x1", "x2", "category", "response")
-tbl_transfer_backup <- tbl_transfer
-tbl_transfer <- tbl_train %>% mutate(response = category)
-
 
 m_gcm <- list()
 m_gcm$name <- "gcm"
@@ -280,10 +302,10 @@ l_tbl_important <- map(
 )
 
 
-ggplot(l_tbl_important[[1]], aes(x1, x2)) +
-  geom_label(aes(label = rank_importance)) +
+ggplot(l_tbl_important[[6]], aes(x1, x2)) +
+  geom_label(aes(label = rank_importance - 1)) +
   geom_abline() +
-  coord_cartesian(xlim = c(0, 7), ylim = c(0, 7))
+  coord_cartesian(xlim = c(0, 8), ylim = c(0, 8))
 
 
 # compare predictions -----------------------------------------------------
@@ -325,6 +347,7 @@ tbl_preds_gcm_downsample <- reduce(l_preds_gcm_downsample, cbind) %>%
   as.data.frame()
 colnames(tbl_preds_gcm_downsample) <- str_c("keep = ", 1:10)
 
+cor(cbind(preds_gcm, tbl_preds_gcm_downsample))
 
 
 preds_nb <- predict(m_nb, tbl_fully_crossed, type = "raw") %>% 
@@ -339,9 +362,15 @@ tbl_fully_crossed$pred_gcm <- preds_gcm
 tbl_fully_crossed$pred_gcm_forgetful <- preds_gcm_forget
 tbl_fully_crossed <- cbind(tbl_fully_crossed, tbl_preds_gcm_downsample)
 
+tbl_fully_crossed %>%
+  dplyr::select(x1, x2, str_c("keep = ", 1:10)) %>%
+  pivot_longer(cols = str_c("keep = ", 1:10)) %>%
+  ggplot(aes(x1, x2)) +
+  geom_tile(aes(fill = value)) +
+  facet_wrap(~ name, ncol = 2)
 
 
-ggplot(tbl_fully_crossed %>% pivot_longer(cols = c(pred_svm, pred_gcm, pred_gcm_forgetful, pred_nb, "1")), aes(x1, x2)) +
+ggplot(tbl_fully_crossed %>% pivot_longer(cols = c(pred_svm, pred_gcm, pred_gcm_forgetful, pred_nb, "keep = 1")), aes(x1, x2)) +
   geom_tile(aes(fill = value)) +
   geom_abline() +
   facet_wrap(~ name) +
@@ -379,7 +408,8 @@ ggplot(tbl_cors %>% filter(model_2 %in% c(str_c("keep = ", 1:10), "GCM Forget", 
     strip.background = element_rect(fill = "white"),
     text = element_text(size = 16),
     axis.text.x = element_text(angle = 90)
-  )
+  ) +
+  coord_cartesian(ylim = c(.5, 1))
 
 
 
