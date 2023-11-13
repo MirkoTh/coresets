@@ -292,11 +292,11 @@ ggplot(tbl_cors %>% filter(model_2 %in% c(str_c("keep = ", 1:7), "GCM Forget", "
 
 # recovery of strategic sampling models
 
-c <- seq(.5, 2, length.out = 1) # 4
-w <- seq(.2, .8, length.out = 1) # 4
-bias <- seq(.2, .8, length.out = 1) # 3
-n_reps <- c(5) # c(5, 10, 20)
-k <- 4 #seq(2, 7, by = 1)
+c <- c(1, 2) #seq(.5, 2, length.out = 3) # 4
+w <- c(.5, .75) #seq(.2, .8, length.out = 3) # 4
+bias <- c(.5, .75) #seq(.2, .8, length.out = 3) # 3
+n_reps <- c(2, 7)
+k <- seq(2, 7, by = 1)
 tbl_params <- crossing(c, w, bias, n_reps, k)
 
 list_params <- pmap(tbl_params[, c("c", "w", "bias")], ~ list(
@@ -325,21 +325,21 @@ l_results_strategic <- future_pmap(
   .progress = TRUE,
   .options = furrr_options(seed = NULL)
 )
-saveRDS(l_results_strategic, file = "data/recover-strat-sampling-only-down.RDS")
 future::plan("default")
+saveRDS(l_results_strategic, file = "data/recover-strat-sampling--only-down.RDS")
 
 
 
 # recovery of models using all data 
 # i.e., gcm vanilla and gcm forgetful
 
-c <- seq(.5, 2, length.out = 1) # 4
-w <- seq(.2, .8, length.out = 1) # 4
-bias <- seq(.2, .8, length.out = 1) # 3
-delta <- .00001#c(0.00001, .5, .95)
-n_reps <- c(5) # c(5, 10, 20)
-k <- NA #seq(2, 7, by = 1)
-tbl_params <- crossing(c, w, bias, n_reps, k)
+c <- c(1, 2) #seq(.5, 2, length.out = 3) # 4
+w <- c(.5, .75) #seq(.2, .8, length.out = 3) # 4
+bias <- c(.5, .75) #seq(.2, .8, length.out = 3) # 3
+delta <- c(0.00001, .9)
+n_reps <- c(2, 7)
+k <- seq(2, 7, by = 1)
+tbl_params <- crossing(c, w, bias, delta, n_reps, k)
 
 list_params <- pmap(tbl_params[, c("c", "w", "bias", "delta")], ~ list(
   not_tf = c(c = ..1, w = ..2, bias = ..3, delta = ..4),
@@ -350,7 +350,7 @@ l_ks <- map(tbl_params$k, 1)
 
 
 future::plan(multisession, workers = future::availableCores() - 3)
-l_results_strategic <- future_pmap(
+l_results_vanilla_forgetful <- future_pmap(
   .l = list(l_n_reps, list_params, l_ks),
   .f = generate_and_fit, 
   tbl_train_orig = l_tbl_x_ii$train, 
@@ -361,8 +361,8 @@ l_results_strategic <- future_pmap(
   .progress = TRUE,
   .options = furrr_options(seed = NULL)
 )
-saveRDS(l_results_strategic, file = "data/recover-strat-sampling-only-down.RDS")
 future::plan("default")
+saveRDS(l_results_vanilla_forgetful, file = "data/recover-vanilla-and-forgetful--only-down.RDS")
 
 
 
