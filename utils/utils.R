@@ -64,7 +64,8 @@ f_similarity_cat <- function(x, w, c, delta, x_new, d_measure) {
   #' @description helper function calculating similarities for all items
   #' within a given category
   x$lag <- abs(x$trial_id - max(x$trial_id)) + x_new$trial_id
-  x$prop_decay <- exp(- (delta * x$lag))
+  #x$prop_decay <- exp(- (delta * x$lag))
+  x$prop_decay <- (x$lag + 1) ^ (- delta)
   sims <- pmap_dbl(x[, c("x1", "x2")], f_similarity, w, c, x_new, d_measure)
   return(sims*x$prop_decay)
 }
@@ -411,21 +412,18 @@ plot_new_and_dropped <- function(tbl_all) {
 }
 
 
-generate_data <- function(n_reps, params, tbl_transfer, tbl_train, n_feat, d_measure, lo, hi) {
+generate_data <- function(params, tbl_transfer, tbl_train, n_feat, d_measure, lo, hi) {
   #' @description helper function to generate data on transfer data given 
   #' training data and set of parameters
   
-  tbl_cat_probs <- category_probs(params$tf, tbl_transfer, tbl_train, 2, 1, lo, hi)
-  tbl_generate <- tibble(
-    repeat_tibble(tbl_transfer, n_reps), 
-    prob_correct = rep(tbl_cat_probs$prob_correct, n_reps)
-  )
-  tbl_generate$accuracy <- rbernoulli(nrow(tbl_generate), tbl_generate$prob_correct)
-  tbl_generate$response <- pmap_dbl(
-    tbl_generate[, c("category", "accuracy")], 
+  tbl_cat_probs <- category_probs(params$tf, tbl_transfer, tbl_train, n_feat, d_measure, lo, hi)
+  tbl_transfer$p_correct <- tbl_cat_probs$prob_correct
+  tbl_transfer$accuracy <- rbernoulli(nrow(tbl_transfer), tbl_transfer$p_correct)
+  tbl_transfer$response <- pmap_dbl(
+    tbl_transfer[, c("category", "accuracy")], 
     ~ c((as.numeric(as.character(..1)) - 1) * -1, as.numeric(as.character(..1)))[(..2 + 1)]
   )
-  return(tbl_generate)
+  return(tbl_transfer)
 }
 
 
@@ -435,12 +433,23 @@ generate_and_fit <- function(n_reps, params, k, tbl_train_orig, l_tbl_train_stra
   #' 
   #' n_feat, d_measure, lo, hi
   
+  # randomize trial id in each recovery iteration
+  tbl_transfer_rep <- repeat_tibble(tbl_transfer, n_reps)
+  tbl_transfer_rep$trial_id <- sample(1:nrow(tbl_transfer_rep), nrow(tbl_transfer_rep), replace = FALSE)
+  tbl_transfer_rep$response <- tbl_transfer_rep$category # to get p(correct) out
+  tbl_train_orig$trial_id <- sample(1:nrow(tbl_train_orig), nrow(tbl_train_orig), replace = FALSE)
+  
+  
   if (is_strategic) {
     # generate data given strat. sampling model
     tbl_train_strat <- l_tbl_train_strat[[k]] %>% mutate(trial_id = sample(1:nrow(.), nrow(.), replace = FALSE))
-    tbl_generate <- generate_data(n_reps, params, tbl_transfer, tbl_train_strat, l_info$n_feat, l_info$d_measure, l_info$lo[1:3], l_info$hi[1:3])
+    tbl_generate <- generate_data(params, tbl_transfer_rep, tbl_train_strat, l_info$n_feat, l_info$d_measure, l_info$lo[1:3], l_info$hi[1:3])
   } else if (!is_strategic) {
-    tbl_generate <- generate_data(n_reps, params, tbl_transfer, tbl_train_orig, l_info$n_feat, l_info$d_measure, l_info$lo, l_info$hi)
+    if ("delta" %in% params$not_tf){
+      tbl_generate <- generate_data(params, tbl_transfer_rep, tbl_train_orig, l_info$n_feat, l_info$d_measure, l_info$lo, l_info$hi)
+    } else if (!("delta" %in% params$not_tf)){
+      tbl_generate <- generate_data(params, tbl_transfer_rep, tbl_train_orig, l_info$n_feat, l_info$d_measure, l_info$lo[1:3], l_info$hi[1:3])
+    }
   }
   
   
@@ -455,7 +464,7 @@ generate_and_fit <- function(n_reps, params, k, tbl_train_orig, l_tbl_train_stra
   # iterate over all plausible ks
   l_params_strat <- list()
   l_results_strat <- list()
-  for (i in 1:length(l_tbl_train_strat)) {
+  for (i in 2:length(l_tbl_train_strat)) {
     results_strat <- optim(
       params_init_tf,
       gcm_likelihood_no_forgetting,

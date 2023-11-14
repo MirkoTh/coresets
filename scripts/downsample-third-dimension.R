@@ -1,5 +1,5 @@
 # Load packages and utils -------------------------------------------------
-devtools::install_github("r-lib/conflicted")
+#devtools::install_github("r-lib/conflicted")
 
 rm(list = ls())
 set.seed(43995)
@@ -18,7 +18,7 @@ library(e1071)
 path_load <- c("utils/utils.R")
 walk(path_load, source)
 
-is_fitting <- TRUE
+is_fitting <- FALSE
 
 
 # we want seven values of orientation and length
@@ -292,19 +292,19 @@ ggplot(tbl_cors %>% filter(model_2 %in% c(str_c("keep = ", 1:7), "GCM Forget", "
 
 # recovery of strategic sampling models
 
-c <- c(1, 2) #seq(.5, 2, length.out = 3) # 4
+c <- c(.25, .5, 1) #seq(.5, 2, length.out = 3) # 4
 w <- c(.5, .75) #seq(.2, .8, length.out = 3) # 4
 bias <- c(.5, .75) #seq(.2, .8, length.out = 3) # 3
-n_reps <- c(2, 7)
+n_reps <- c(5, 10)
 k <- seq(2, 7, by = 1)
-tbl_params <- crossing(c, w, bias, n_reps, k)
+tbl_params_strat <- crossing(c, w, bias, n_reps, k)
 
-list_params <- pmap(tbl_params[, c("c", "w", "bias")], ~ list(
+list_params <- pmap(tbl_params_strat[, c("c", "w", "bias")], ~ list(
   not_tf = c(c = ..1, w = ..2, bias = ..3),
   tf = upper_and_lower_bounds(c(c = ..1, w = ..2, bias = ..3), lo[1:3], hi[1:3])
 ))
-l_n_reps <- map(tbl_params$n_reps, 1)
-l_ks <- map(tbl_params$k, 1)
+l_n_reps <- map(tbl_params_strat$n_reps, 1)
+l_ks <- map(tbl_params_strat$k, 1)
 
 l_info <- list(
   n_feat = n_feat, 
@@ -312,57 +312,177 @@ l_info <- list(
   lo = lo, 
   hi = hi
 )
+is_fitting <- TRUE
+if (is_fitting) {
+  future::plan(multisession, workers = future::availableCores() - 1)
+  l_results_strategic <- future_pmap(
+    .l = list(l_n_reps, list_params, l_ks),
+    .f = generate_and_fit, 
+    tbl_train_orig = l_tbl_x_ii$train, 
+    l_tbl_train_strat = l_tbl_important, 
+    tbl_transfer = l_tbl_x_ii$transfer, 
+    l_info = l_info,
+    is_strategic = TRUE,
+    .progress = TRUE,
+    .options = furrr_options(seed = NULL)
+  )
+  future::plan("default")
+  saveRDS(l_results_strategic, file = "data/recover-strat-sampling--only-down.RDS")
+} else if (!is_fitting) {
+  l_results_strategic <- readRDS("data/recover-strat-sampling--only-down.RDS")
+}
 
-future::plan(multisession, workers = future::availableCores() - 3)
-l_results_strategic <- future_pmap(
-  .l = list(l_n_reps, list_params, l_ks),
-  .f = generate_and_fit, 
-  tbl_train_orig = l_tbl_x_ii$train, 
-  l_tbl_train_strat = l_tbl_important, 
-  tbl_transfer = l_tbl_x_ii$transfer, 
-  l_info = l_info,
-  is_strategic = TRUE,
-  .progress = TRUE,
-  .options = furrr_options(seed = NULL)
-)
-future::plan("default")
-saveRDS(l_results_strategic, file = "data/recover-strat-sampling--only-down.RDS")
+
+tbl_n2lls_strat <- map(map(map(l_results_strategic, "n2lls"), "strategic"), unlist) %>%
+  reduce(rbind) %>% as.data.frame() %>% as_tibble()
+colnames(tbl_n2lls_strat) <- 2:7
+tbl_n2lls_strat <- cbind(tbl_params_strat, tbl_n2lls_strat) %>% as_tibble()
+
+tbl_n2lls_vanilla_forgetful <- map(map(map(l_results_strategic, "n2lls"), ~ c(.x["original"], .x["decay"])), unlist) %>%
+  reduce(rbind) %>% as.data.frame() %>% as_tibble()
+tbl_recover_strat_all <- cbind(tbl_n2lls_strat, tbl_n2lls_vanilla_forgetful)
+
+tbl_recover_strat_all_long <- tbl_recover_strat_all %>%
+  pivot_longer(
+    cols = c("original", "decay", as.character(2:7)),
+    names_to = "model",
+    values_to = "n2ll"
+  )
+tbl_recover_strat_all_long$n_params <- 3
+tbl_recover_strat_all_long$n_params[tbl_recover_strat_all_long$model == "decay"] <- 4
+tbl_recover_strat_all_long$aic <- log(nrow(l_tbl_x_ii$transfer)) + tbl_recover_strat_all_long$n2ll
+
+tbl_summary_strat <- tbl_recover_strat_all_long %>%
+  group_by(c, w, bias, n_reps, k) %>%
+  mutate(
+    min_aic = min(aic),
+    is_winner = aic == min_aic
+  ) %>%
+  filter(is_winner) %>%
+  group_by(k) %>%
+  count(model) %>% ungroup()
+
+
+ggplot(tbl_summary_strat, aes(k, model)) +
+  geom_tile(aes(fill = n)) +
+  geom_label(aes(label = n)) +
+  geom_tile(data = tbl_summary_strat %>% filter(k == model), aes(k, model), color = "white", size = 2, alpha = 0) +
+  #facet_wrap(~ n_reps) +
+  scale_fill_viridis_c(guide = "none") +
+  theme_bw() +
+  scale_x_continuous(expand = c(0, 0), breaks = seq(2, 7, by = 1)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "Model In", y = "Model Out") +
+  theme(
+    strip.background = element_rect(fill = "white"),
+    text = element_text(size = 16)
+  )
 
 
 
 # recovery of models using all data 
 # i.e., gcm vanilla and gcm forgetful
 
-c <- c(1, 2) #seq(.5, 2, length.out = 3) # 4
+c <- c(.25, .5, 1, 1.5) #seq(.5, 2, length.out = 3) # 4
 w <- c(.5, .75) #seq(.2, .8, length.out = 3) # 4
 bias <- c(.5, .75) #seq(.2, .8, length.out = 3) # 3
-delta <- c(0.00001, .9)
-n_reps <- c(2, 7)
-k <- seq(2, 7, by = 1)
-tbl_params <- crossing(c, w, bias, delta, n_reps, k)
+delta <- c(.5, .95)
+delta_absent <- NA
+n_reps <- c(5, 10)
+k <- NA
+tbl_params_forgetful <- crossing(c, w, bias, delta, n_reps, k)
+tbl_params_vanilla <- crossing(c, w, bias, delta_absent, n_reps, k)
 
-list_params <- pmap(tbl_params[, c("c", "w", "bias", "delta")], ~ list(
+list_params_forgetful <- pmap(tbl_params_forgetful[, c("c", "w", "bias", "delta")], ~ list(
   not_tf = c(c = ..1, w = ..2, bias = ..3, delta = ..4),
   tf = upper_and_lower_bounds(c(c = ..1, w = ..2, bias = ..3, delta = ..4), lo, hi)
 ))
-l_n_reps <- map(tbl_params$n_reps, 1)
-l_ks <- map(tbl_params$k, 1)
+l_n_reps_forgetful <- map(tbl_params_forgetful$n_reps, 1)
+l_ks_forgetful <- map(tbl_params_forgetful$k, 1)
+
+list_params_vanilla <- pmap(tbl_params_vanilla[, c("c", "w", "bias")], ~ list(
+  not_tf = c(c = ..1, w = ..2, bias = ..3),
+  tf = upper_and_lower_bounds(c(c = ..1, w = ..2, bias = ..3), lo[1:3], hi[1:3])
+))
+l_n_reps_vanilla <- map(tbl_params_vanilla$n_reps, 1)
+l_ks_vanilla <- map(tbl_params_vanilla$k, 1)
+
+l_n_reps_forgetful_vanilla <- c(l_n_reps_forgetful, l_n_reps_vanilla)
+l_ks_forgetful_vanilla <- c(l_ks_forgetful, l_ks_vanilla)
+list_params_forgetful_vanilla <- c(list_params_forgetful, list_params_vanilla)
+
+if (is_fitting) {
+  future::plan(multisession, workers = future::availableCores() - 1)
+  l_results_vanilla_forgetful <- future_pmap(
+    .l = list(l_n_reps_forgetful_vanilla, list_params_forgetful_vanilla, list_params_forgetful_vanilla),
+    .f = generate_and_fit, 
+    tbl_train_orig = l_tbl_x_ii$train, 
+    l_tbl_train_strat = l_tbl_important, 
+    tbl_transfer = l_tbl_x_ii$transfer, 
+    l_info = l_info,
+    is_strategic = FALSE,
+    .progress = TRUE,
+    .options = furrr_options(seed = NULL)
+  )
+  future::plan("default")
+  saveRDS(l_results_vanilla_forgetful, file = "data/recover-vanilla-and-forgetful--only-down.RDS")
+} else if (!is_fitting) {
+  l_results_vanilla_forgetful <- readRDS("data/recover-vanilla-and-forgetful--only-down.RDS")
+}
 
 
-future::plan(multisession, workers = future::availableCores() - 3)
-l_results_vanilla_forgetful <- future_pmap(
-  .l = list(l_n_reps, list_params, l_ks),
-  .f = generate_and_fit, 
-  tbl_train_orig = l_tbl_x_ii$train, 
-  l_tbl_train_strat = l_tbl_important, 
-  tbl_transfer = l_tbl_x_ii$transfer, 
-  l_info = l_info,
-  is_strategic = FALSE,
-  .progress = TRUE,
-  .options = furrr_options(seed = NULL)
+tbl_n2lls_strat <- map(map(map(l_results_vanilla_forgetful, "n2lls"), "strategic"), unlist) %>%
+  reduce(rbind) %>% as.data.frame() %>% as_tibble()
+colnames(tbl_n2lls_strat) <- 2:7
+tbl_n2lls_strat <- cbind(tbl_params_vanilla_forgetful, tbl_n2lls_strat) %>% as_tibble()
+
+tbl_n2lls_vanilla_forgetful <- map(map(map(l_results_vanilla_forgetful, "n2lls"), ~ c(.x["original"], .x["decay"])), unlist) %>%
+  reduce(rbind) %>% as.data.frame() %>% as_tibble()
+tbl_recover_vanilla_forgetful_all <- cbind(tbl_n2lls_strat, tbl_n2lls_vanilla_forgetful)
+
+
+tbl_recover_vanilla_forgetful_all_long <- tbl_recover_vanilla_forgetful_all %>%
+  pivot_longer(
+    cols = c("original", "decay", as.character(2:7)),
+    names_to = "model",
+    values_to = "n2ll"
+  )
+tbl_recover_vanilla_forgetful_all_long$n_params <- 3
+tbl_recover_vanilla_forgetful_all_long$n_params[tbl_recover_vanilla_forgetful_all_long$model == "decay"] <- 4
+tbl_recover_vanilla_forgetful_all_long$aic <- log(nrow(l_tbl_x_ii$transfer)) + tbl_recover_vanilla_forgetful_all_long$n2ll
+
+tbl_summary_vanilla_forgetful <- tbl_recover_vanilla_forgetful_all_long %>%
+  group_by(c, w, bias, delta, n_reps) %>%
+  mutate(
+    min_aic = min(aic),
+    is_winner = aic == min_aic,
+    m_gen = c("original", "decay")[as.numeric(delta > .01) + 1]
+  ) %>%
+  filter(is_winner) %>%
+  group_by(m_gen, delta, n_reps) %>%
+  count(model) %>%
+  ungroup()
+tbl_summary_vanilla_forgetful$m_gen_annotate <- tbl_summary_vanilla_forgetful$m_gen
+tbl_summary_vanilla_forgetful$m_gen_annotate[delta > .01] <- str_c(
+  tbl_summary_vanilla_forgetful$m_gen[delta > .01], ", delta =\n",
+  format(tbl_summary_vanilla_forgetful$delta[delta > .01], scientific = FALSE)
 )
-future::plan("default")
-saveRDS(l_results_vanilla_forgetful, file = "data/recover-vanilla-and-forgetful--only-down.RDS")
+
+
+ggplot(tbl_summary_vanilla_forgetful, aes(m_gen_annotate, model)) +
+  geom_tile(aes(fill = n)) +
+  geom_tile(data = tbl_summary_vanilla_forgetful %>% filter(m_gen == model), aes(m_gen_annotate, model), color = "white", size = 2, alpha = 0) +
+  geom_label(aes(label = n)) +
+  scale_fill_viridis_c(guide = "none") +
+  theme_bw() +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "Model In", y = "Model Out") +
+  theme(
+    strip.background = element_rect(fill = "white"),
+    text = element_text(size = 16)
+  ) +
+  facet_wrap(~ n_reps)
 
 
 
