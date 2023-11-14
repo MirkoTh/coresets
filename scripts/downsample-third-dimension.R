@@ -290,9 +290,11 @@ ggplot(tbl_cors %>% filter(model_2 %in% c(str_c("keep = ", 1:7), "GCM Forget", "
 # Category Learning Model Recovery ----------------------------------------
 
 
-# recovery of strategic sampling models
 
-c <- c(.25, .5, 1) #seq(.5, 2, length.out = 3) # 4
+# recovery of strategic sampling models -----------------------------------
+
+
+c <- c(1, 1.5, 2, 2.5) #seq(.5, 2, length.out = 3) # 4
 w <- c(.5, .75) #seq(.2, .8, length.out = 3) # 4
 bias <- c(.5, .75) #seq(.2, .8, length.out = 3) # 3
 n_reps <- c(5, 10)
@@ -314,7 +316,7 @@ l_info <- list(
 )
 is_fitting <- TRUE
 if (is_fitting) {
-  future::plan(multisession, workers = future::availableCores() - 1)
+  future::plan(multisession, workers = future::availableCores() - 2)
   l_results_strategic <- future_pmap(
     .l = list(l_n_reps, list_params, l_ks),
     .f = generate_and_fit, 
@@ -356,18 +358,20 @@ tbl_summary_strat <- tbl_recover_strat_all_long %>%
   group_by(c, w, bias, n_reps, k) %>%
   mutate(
     min_aic = min(aic),
-    is_winner = aic == min_aic
+    is_winner = aic == min_aic,
+    n_reps = str_c("N Transfer Trials = ", n_reps * nrow(l_tbl_x_ii$transfer))
   ) %>%
   filter(is_winner) %>%
-  group_by(k) %>%
+  group_by(k, n_reps) %>%
   count(model) %>% ungroup()
 
 
 ggplot(tbl_summary_strat, aes(k, model)) +
   geom_tile(aes(fill = n)) +
   geom_label(aes(label = n)) +
-  geom_tile(data = tbl_summary_strat %>% filter(k == model), aes(k, model), color = "white", size = 2, alpha = 0) +
-  #facet_wrap(~ n_reps) +
+  geom_tile(data = tbl_summary_strat %>% filter(k == model), aes(k, model), color = "black", size = 3, alpha = 0) +
+  geom_tile(data = tbl_summary_strat %>% filter(k == model), aes(k, model), color = "white", size = 1, alpha = 0) +
+  facet_wrap(~ n_reps) +
   scale_fill_viridis_c(guide = "none") +
   theme_bw() +
   scale_x_continuous(expand = c(0, 0), breaks = seq(2, 7, by = 1)) +
@@ -380,10 +384,26 @@ ggplot(tbl_summary_strat, aes(k, model)) +
 
 
 
-# recovery of models using all data 
-# i.e., gcm vanilla and gcm forgetful
+tbl_recover_strat_all_long %>%
+  group_by(c, w, bias, n_reps, k) %>%
+  mutate(
+    min_aic = min(aic),
+    is_winner = aic == min_aic,
+    n_reps = str_c("N Transfer Trials = ", n_reps * nrow(l_tbl_x_ii$transfer))
+  ) %>%
+  filter(is_winner) %>%
+  group_by(c, k) %>%
+  count(model) %>% ungroup() %>%
+  ggplot(aes(k, model)) +
+  geom_tile(aes(fill = n)) +
+  geom_label(aes(label = n)) +
+  facet_wrap(~ c)
 
-c <- c(.25, .5, 1, 1.5) #seq(.5, 2, length.out = 3) # 4
+
+# recovery of vanilla and forgetful models --------------------------------
+
+
+c <- c(1, 1.5, 2, 2.5) #seq(.5, 2, length.out = 3) # 4
 w <- c(.5, .75) #seq(.2, .8, length.out = 3) # 4
 bias <- c(.5, .75) #seq(.2, .8, length.out = 3) # 3
 delta <- c(.5, .95)
@@ -391,7 +411,9 @@ delta_absent <- NA
 n_reps <- c(5, 10)
 k <- NA
 tbl_params_forgetful <- crossing(c, w, bias, delta, n_reps, k)
-tbl_params_vanilla <- crossing(c, w, bias, delta_absent, n_reps, k)
+tbl_params_vanilla <- crossing(c, w, bias, delta = delta_absent, n_reps, k)
+tbl_params_vanilla <- repeat_tibble(tbl_params_vanilla, 2)
+tbl_params_vanilla_forgetful <- rbind(tbl_params_vanilla, tbl_params_forgetful)
 
 list_params_forgetful <- pmap(tbl_params_forgetful[, c("c", "w", "bias", "delta")], ~ list(
   not_tf = c(c = ..1, w = ..2, bias = ..3, delta = ..4),
@@ -412,7 +434,7 @@ l_ks_forgetful_vanilla <- c(l_ks_forgetful, l_ks_vanilla)
 list_params_forgetful_vanilla <- c(list_params_forgetful, list_params_vanilla)
 
 if (is_fitting) {
-  future::plan(multisession, workers = future::availableCores() - 1)
+  future::plan(multisession, workers = future::availableCores() - 2)
   l_results_vanilla_forgetful <- future_pmap(
     .l = list(l_n_reps_forgetful_vanilla, list_params_forgetful_vanilla, list_params_forgetful_vanilla),
     .f = generate_and_fit, 
@@ -456,7 +478,8 @@ tbl_summary_vanilla_forgetful <- tbl_recover_vanilla_forgetful_all_long %>%
   mutate(
     min_aic = min(aic),
     is_winner = aic == min_aic,
-    m_gen = c("original", "decay")[as.numeric(delta > .01) + 1]
+    m_gen = c("original", "decay")[as.numeric(delta > .01) + 1],
+    n_reps = str_c("N Transfer Trials = ", n_reps * nrow(l_tbl_x_ii$transfer)),
   ) %>%
   filter(is_winner) %>%
   group_by(m_gen, delta, n_reps) %>%
@@ -471,7 +494,8 @@ tbl_summary_vanilla_forgetful$m_gen_annotate[delta > .01] <- str_c(
 
 ggplot(tbl_summary_vanilla_forgetful, aes(m_gen_annotate, model)) +
   geom_tile(aes(fill = n)) +
-  geom_tile(data = tbl_summary_vanilla_forgetful %>% filter(m_gen == model), aes(m_gen_annotate, model), color = "white", size = 2, alpha = 0) +
+  geom_tile(data = tbl_summary_vanilla_forgetful %>% filter(m_gen == model), aes(m_gen_annotate, model), color = "black", size = 3, alpha = 0) +
+  geom_tile(data = tbl_summary_vanilla_forgetful %>% filter(m_gen == model), aes(m_gen_annotate, model), color = "white", size = 1, alpha = 0) +
   geom_label(aes(label = n)) +
   scale_fill_viridis_c(guide = "none") +
   theme_bw() +
@@ -485,7 +509,20 @@ ggplot(tbl_summary_vanilla_forgetful, aes(m_gen_annotate, model)) +
   facet_wrap(~ n_reps)
 
 
-
+tbl_recover_vanilla_forgetful_all_long %>%
+  group_by(c, w, bias, delta, n_reps) %>%
+  mutate(
+    min_aic = min(aic),
+    is_winner = aic == min_aic,
+    n_reps = str_c("N Transfer Trials = ", n_reps * nrow(l_tbl_x_ii$transfer))
+  ) %>%
+  filter(is_winner) %>%
+  group_by(c, delta) %>%
+  count(model) %>% ungroup() %>%
+  ggplot(aes(as.factor(delta), model)) +
+  geom_tile(aes(fill = n)) +
+  geom_label(aes(label = n)) +
+  facet_wrap(~ c)
 
 
 # Recognition Model Recovery ----------------------------------------------
@@ -500,8 +537,30 @@ ggplot(tbl_summary_vanilla_forgetful, aes(m_gen_annotate, model)) +
 
 
 
+# parameter recovery ------------------------------------------------------
 
 
+
+# only plain vanilla gcm
+
+tbl_param_recovery_vanilla <- cbind(
+  tbl_params_vanilla_forgetful, 
+  reduce(
+    map(map(l_results_vanilla_forgetful, "params_orig"), "not_tf"),
+    rbind
+  ) %>% as.data.frame() %>% as_tibble() %>%
+    rename(c_out = c, w_out = w, bias_out = bias)
+) %>% as_tibble() %>% filter(delta < .1)
+
+tbl_param_recovery_vanilla %>%
+  pivot_longer(cols = c(c, w, bias), names_to = "parameter_in", values_to = "value_in") %>%
+  rename(c = c_out, w = w_out, bias = bias_out) %>%
+  pivot_longer(cols = c(c, w, bias), names_to = "parameter_out", values_to = "value_out") %>%
+  filter(parameter_in == parameter_out) %>%
+  ggplot(aes(value_in, value_out)) +
+  geom_point() +
+  geom_abline() +
+  facet_wrap(~ parameter_in)
 
 
 
