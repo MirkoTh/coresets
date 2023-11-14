@@ -445,12 +445,13 @@ generate_and_fit <- function(n_reps, params, k, tbl_train_orig, l_tbl_train_stra
     tbl_train_strat <- l_tbl_train_strat[[k]] %>% mutate(trial_id = sample(1:nrow(.), nrow(.), replace = FALSE))
     tbl_generate <- generate_data(params, tbl_transfer_rep, tbl_train_strat, l_info$n_feat, l_info$d_measure, l_info$lo[1:3], l_info$hi[1:3])
   } else if (!is_strategic) {
-    if ("delta" %in% params$not_tf){
+    if ("delta" %in% names(params$not_tf)){
       tbl_generate <- generate_data(params, tbl_transfer_rep, tbl_train_orig, l_info$n_feat, l_info$d_measure, l_info$lo, l_info$hi)
-    } else if (!("delta" %in% params$not_tf)){
+    } else if (!("delta" %in% names(params$not_tf))){
       tbl_generate <- generate_data(params, tbl_transfer_rep, tbl_train_orig, l_info$n_feat, l_info$d_measure, l_info$lo[1:3], l_info$hi[1:3])
     }
   }
+  cat("data generated")
   
   
   # starting values for strat. sampling and default gcm model
@@ -544,6 +545,7 @@ sims_hotspot_strat <- function(w, sens, gamma, tbl_hotspots, tbl_strat, tbl_test
   #' @param tbl_strat imagined data
   #' @param tbl_test test data
   #' @return a list with both similarities
+  #' 
   
   # similarity on presented data
   sims_hotspots <- pmap_dbl(
@@ -551,7 +553,7 @@ sims_hotspot_strat <- function(w, sens, gamma, tbl_hotspots, tbl_strat, tbl_test
     ~ sum(pmap_dbl(
       tbl_hotspots[, c("x1", "x2")], 
       f_similarity, 
-      c(w, 1 - w), sens, tibble(x1 = .x, x2 = .y), 1
+      c(w, 1 - w), sens[1], tibble(x1 = .x, x2 = .y), 1
     ))
   )
   
@@ -561,7 +563,7 @@ sims_hotspot_strat <- function(w, sens, gamma, tbl_hotspots, tbl_strat, tbl_test
     ~ sum(pmap_dbl(
       tbl_strat[, c("x1", "x2")], 
       f_similarity, 
-      c(w, 1 - w), sens, tibble(x1 = .x, x2 = .y), 1
+      c(w, 1 - w), sens[2], tibble(x1 = .x, x2 = .y), 1
     ))
   )
   
@@ -576,8 +578,8 @@ sims_hotspot_strat <- function(w, sens, gamma, tbl_hotspots, tbl_strat, tbl_test
 }
 
 
-gen_wiener_2_slopes <- function(
-    sim_hs, sim_strat, alpha, beta, tau, delta_ic, delta_sl1, delta_sl2, n_reps
+gen_wiener <- function(
+    sim_hs, sim_strat, alpha, beta, tau, delta_ic, delta_sl1, n_reps, delta_sl2 = NULL
 ) {
   #' @description generate recognition data with wiener likelihood 
   #' given similarities to presented and imagined data
@@ -585,6 +587,7 @@ gen_wiener_2_slopes <- function(
   #' delta_sl1 and delta_sl2, respectively
   #' @return a tibble with generated data and similarities
   
+  if (is.null(delta_sl2)) {delta_sl2 <- 0}
   tbl_rt_gen <- as_tibble(map2_df(
     sim_hs, sim_strat, 
     ~ rwiener(
@@ -593,7 +596,11 @@ gen_wiener_2_slopes <- function(
     )
   ))
   tbl_rt_gen$rt <- tbl_rt_gen$q
-  tbl_rt_gen$model <- "Generating: 2 Slopes"
+  if (delta_sl2 == 0) {
+    tbl_rt_gen$model <- "Generating: 1 Slope"
+  } else if (delta_sl2 != 0) {
+    tbl_rt_gen$model <- "Generating: 2 Slopes"
+  }
   tbl_rt_gen$resp_recode <- tbl_rt_gen$resp
   tbl_rt_gen$resp <- fct_relabel(tbl_rt_gen$resp, ~ c("old", "new"))
   tbl_rt_gen$sim_strat_z <- rep(sim_strat, each = n_reps)
@@ -626,7 +633,7 @@ wiener_reg1_delta_log <- function(x, my_tbl) {
   return(neg2loglik)
 }
 
-wiener_reg2_delta_log <- function(x, my_tbl) {
+wiener_reg_delta_log <- function(x, my_tbl) {
   #' @description Wiener LL with linear regression on drift rate
   #' regressing drift rate on two similarities
   #' @return the -2 * sum of the LL
@@ -637,6 +644,7 @@ wiener_reg2_delta_log <- function(x, my_tbl) {
   delta_ic <- x[["delta_ic"]]
   delta_slope1 <- x[["delta_sl1"]]
   delta_slope2 <- x[["delta_sl2"]]
+  if (is.null(delta_slope2)) delta_slope2 <- 0
   
   
   lik <- pmap_dbl(
@@ -653,25 +661,63 @@ wiener_reg2_delta_log <- function(x, my_tbl) {
   return(neg2loglik)
 }
 
-gen_recognition_2_slopes <- function(params, tbl_hotspots, tbl_strat, tbl_test) {
+gen_recognition <- function(params, tbl_train, tbl_strat, tbl_test) {
   #' @description convenience function generating recognition responses
   #' given global similarity computation of presented and imagined data
   #' and wiener diffusion process while regressing drift rate on 
   #' these two similarities
   #' @return a tibble with the generated responses
   
-  l_sims <- sims_hotspot_strat(
-    params$w, params$sens, params$gamma, tbl_hotspots, tbl_strat, tbl_test
-  )
-  tbl_gen <- gen_wiener_2_slopes(
-    l_sims$sims_hotspots_z, l_sims$sims_strat_z,
-    params$alpha, params$beta, params$tau,
-    params$delta_ic, params$delta_sl1, params$delta_sl2,
-    1
-  )
+  if("sens2" %in% names(params)) {
+    l_sims <- sims_hotspot_strat(
+      params$w, c(params$sens, params$sens2), params$gamma, tbl_train, tbl_strat, tbl_test
+    )
+  } else if(!"sens2" %in% names(params)) {
+    l_sims <- sims_hotspot_strat(
+      params$w, c(params$sens, params$sens), params$gamma, tbl_train, tbl_strat, tbl_test
+    )
+  }
+  if ("delta_sl2" %in% names(params)){
+    tbl_gen <- gen_wiener(
+      l_sims$sims_hotspots_z, l_sims$sims_strat_z,
+      params$alpha, params$beta, params$tau,
+      params$delta_ic, params$delta_sl1, 1, delta_sl2 = params$delta_sl2
+    )
+  } else if (!"delta_sl2" %in% names(params)){
+    tbl_gen <- gen_wiener(
+      l_sims$sims_hotspots_z, l_sims$sims_strat_z,
+      params$alpha, params$beta, params$tau,
+      params$delta_ic, params$delta_sl1, 1
+    )
+  }
+  
   tbl_gen$x1 <- tbl_test$x1
   tbl_gen$x2 <- tbl_test$x2
+  tbl_gen$label <- tbl_test$label
   return(tbl_gen)
+}
+
+ll_recognition <- function(x, tbl_train, tbl_strat, tbl_test, lo, hi) {
+  #' @description helper function to calculate neg 2 * LL fitting 
+  #' parameters of representation model and decision model
+  #' assuming two similarities affect drift rate
+  #' @return the value of the -2 * LL
+  #'
+  x <- pmap(list(x, lo, hi), upper_and_lower_bounds_revert)
+  if("sens2" %in% names(x)) {
+    l_sims <- sims_hotspot_strat(
+      x[["w"]], c(x[["sens"]], x[["sens2"]]), x[["gamma"]], tbl_train, tbl_strat, tbl_test
+    )
+  } else if (!"sens2" %in% names(x)){
+    l_sims <- sims_hotspot_strat(
+      x[["w"]], c(x[["sens"]], x[["sens"]]), x[["gamma"]], tbl_train, tbl_strat, tbl_test
+    )
+  }
+  tbl_test$pred_lr1 <- l_sims$sims_hotspots_z
+  tbl_test$pred_lr2 <- l_sims$sims_strat_z
+  neg2ll <- wiener_reg2_delta_log(x, tbl_test)
+  
+  return(neg2ll)
 }
 
 
@@ -734,4 +780,15 @@ sample_from_grid <- function(tbl_x, n_trials_total, my_sd) {
   }
   tbl_samples <- tbl_samples %>%
     mutate(trial_id = sample(1:nrow(.), nrow(.)))
+}
+
+
+extract_n_most_important_points <- function(n, l_0, l_1) {
+  #' @description extract important points for each category and combine them into one tbl
+  #' @return the combined tbl
+  tbl_0 <- l_0[[n]] %>% filter(category == 0)
+  tbl_1 <- l_1[[n]] %>% filter(category == 1)
+  tbl_important <- rbind(tbl_0, tbl_1)
+  tbl_important$trial_id <- sample(1:nrow(tbl_important), nrow(tbl_important), replace = FALSE)
+  return(tbl_important)
 }
