@@ -31,6 +31,7 @@
 rm(list = ls())
 set.seed(3453)
 
+library(conflicted)
 library(tidyverse)
 library(grid)
 library(gridExtra)
@@ -39,23 +40,45 @@ library(docstring)
 library(rutils)
 library(cmdstanr)
 library(RWiener)
+conflicts_prefer(RWiener::rwiener)
+
 
 path_load <- c("utils/utils.R", "scripts/stan-wiener.R")
 walk(path_load, source)
 
-l_tbl_up_and_down <- readRDS("data/l_tbl_up_and_down.RDS")
-tbl_hotspots <- readRDS("data/hotspot-data.RDS")
-tbl_transfer <- readRDS("data/transfer-rt-data.RDS")
-tbl_test <- rbind(
-  tbl_hotspots %>% dplyr::select(x1, x2, category, trial_id) %>% mutate(label = "old"),
-  tbl_transfer  %>% dplyr::select(x1, x2, category, trial_id) %>% mutate(label = "new")
+
+
+
+
+# all data seen during training
+tbl_train <- readRDS("data/train-test-third-dimension.RDS")$train
+# data presented during transfer without category feedback
+tbl_transfer <-  readRDS("data/train-test-third-dimension.RDS")$transfer
+tbl_recognition <- rbind(tbl_train %>% mutate(label = "old"), tbl_transfer %>% mutate(label = "new"))
+
+l_tbl_important_down_0 <- readRDS(file = "data/downsampling-ii-uniform-cat-0-third-dim.RDS")
+l_tbl_important_down_1 <- readRDS(file = "data/downsampling-ii-uniform-cat-1-third-dim.RDS")
+l_tbl_important <- map(
+  1:length(l_tbl_important_down_0), 
+  l_0 = l_tbl_important_down_0, 
+  l_1 = l_tbl_important_down_1,
+  extract_n_most_important_points
 )
-tbl_strat <- l_tbl_up_and_down[[2]]
+# exemplary set with average number of retained data points
+tbl_important <- l_tbl_important[[4]]
+# throw out important data points from separate training data set
+tbl_train_not_important <- tbl_train %>% 
+  left_join(tbl_important[, c("x1", "x2", "rank_importance")]) %>%
+  filter(is.na(rank_importance)) %>%
+  select(-rank_importance)
 
 params_gen <- list(
-  w = .5, sens = 15, 
-  gamma = .2, 
-  alpha = 1.3, beta = .55, tau = .25, delta_ic = .9, delta_sl1 = 3, delta_sl2 = 1
+  w = .5, sens = 15, gamma = .2, 
+  alpha = 1.3, beta = .55, tau = .25, 
+  delta_ic = .9, delta_sl1 = 3, 
+  # the following two parameters are optional
+  delta_sl2 = 1,
+  sens2 = 20
 )
 
 x <- params_gen
@@ -68,10 +91,31 @@ tau <- params_gen[["tau"]]
 delta_ic <- params_gen[["delta_ic"]]
 delta_sl1 <- params_gen[["delta_sl1"]]
 delta_sl2 <- params_gen[["delta_sl2"]]
+sens2 <- params_gen[["sens2"]]
 n_reps <- 1
 
+params_gen_1_sens_1_slope <- params_gen[!names(params_gen) %in% c("delta_sl2", "sens2")]
+params_gen_2_sens_1_slope <- params_gen[!names(params_gen) %in% c("delta_sl2")]
+params_gen_1_sens_2_slopes <- params_gen[!names(params_gen) %in% c("sens2")]
+params_gen_2_sens_2_slopes <- params_gen
 
-tbl_gen <- gen_recognition_2_slopes(params_gen, tbl_hotspots, tbl_strat, tbl_test)
+
+tbl_gen_1_sens_1_slope <- gen_recognition(params_gen_1_sens_1_slope, tbl_train_not_important, tbl_important, tbl_recognition)
+tbl_gen_2_sens_1_slope <- gen_recognition(params_gen_2_sens_1_slope, tbl_train_not_important, tbl_important, tbl_recognition)
+tbl_gen_1_sens_2_slopes <- gen_recognition(params_gen_1_sens_2_slopes, tbl_train_not_important, tbl_important, tbl_recognition)
+tbl_gen_2_sens_2_slopes <- gen_recognition(params_gen_2_sens_2_slopes, tbl_train_not_important, tbl_important, tbl_recognition)
+
+tbl_gen_1_sens_1_slope %>%
+  group_by(label) %>%
+  count(resp)
+
+tbl_gen_2_sens_1_slope %>%
+  group_by(label) %>%
+  count(resp)
+
+ggplot(tbl_gen_2_sens_1_slope, aes(rt)) +
+  geom_histogram() +
+  facet_grid(label ~ resp)
 
 start_vals_2 <- list(
   w = .5,
@@ -82,54 +126,71 @@ start_vals_2 <- list(
   tau = .3,
   delta_ic = 1,
   delta_sl1 = 2,
-  delta_sl2 = 2
+  delta_sl2 = 2,
+  sens2 = 15
 )
 
-lo2 <- c(.01, 0, .01, 4, .9, .2, 5, 5, 5)
-hi2 <- c(.99, 20, .99, .1, .1, .4, .01, .01, .01)
-params <- pmap(list(start_vals_2, lo2, hi2), upper_and_lower_bounds)
-params_init_2 <- params
-params_init_1 <- params[1:8]
-lo1 <- lo2[1:8]
-hi1 <- hi2[1:8]
+lo_2_2 <- c(.01, 0, .01, 4, .9, .2, 5, 5, 5, 0)
+hi_2_2 <- c(.99, 40, .99, .1, .1, .4, .01, .01, .01, 40)
+params <- pmap(list(start_vals_2, lo_2_2, hi_2_2), upper_and_lower_bounds)
+# notation _1_2 means one sensitivity and two variables regressed on drift rate
+params_init_2_2 <- params
+params_init_1_1 <- params[1:8]
+params_init_2_1 <- params[c(1:8, 10)]
+params_init_1_2 <- params[1:9]
+lo_1_1 <- lo_2_2[1:8]
+hi_1_1 <- hi_2_2[1:8]
+lo_2_1 <- lo_2_2[c(1:8, 10)]
+hi_2_1 <- hi_2_2[c(1:8, 10)]
+lo_1_2 <- lo_2_2[1:9]
+hi_1_2 <- hi_1_2[1:9]
 
 
 params_gen_sc <- pmap(list(params_gen, lo2, hi2), upper_and_lower_bounds)
 
 # testing
+ll_recognition(
+  params_gen_2_sens_1_slope,
+  tbl_train_not_important,
+  tbl_important,
+  tbl_gen_2_sens_1_slope[, c("x1", "x2", "resp_recode", "rt")],
+  lo_2_1, hi_2_1
+)
+
+
 ll_recognition_2_slopes(
-  params_gen, tbl_hotspots, tbl_strat, 
-  tbl_gen[, c("x1", "x2", "resp_recode", "rt")]
+  params_gen_2_sens_2_slopes, tbl_train, tbl_important, 
+  tbl_gen_2[, c("x1", "x2", "resp_recode", "rt")]
 )
 
 ll_recognition_1_slope(
-  params_gen[1:8], tbl_hotspots, tbl_strat, 
-  tbl_gen[, c("x1", "x2", "resp_recode", "rt")], "sims_hotspots_z"
+  params_gen[1:8], tbl_train, tbl_important, 
+  tbl_gen_2[, c("x1", "x2", "resp_recode", "rt")], "sims_hotspots_z"
 )
 
 ll_recognition_1_slope(
-  params_gen[1:8], tbl_hotspots, tbl_strat, 
-  tbl_gen[, c("x1", "x2", "resp_recode", "rt")], "sims_strat_z"
+  params_gen[1:8], tbl_train, tbl_important, 
+  tbl_gen_2[, c("x1", "x2", "resp_recode", "rt")], "sims_strat_z"
 )
 
 
 
 recovery_study <- function(
-    i, tbl_hotspots, tbl_strat, tbl_test, 
+    i, tbl_hotspots, tbl_important, tbl_test, 
     params_init_1, params_init_2, params_gen
 ) {
-  tbl_gen <- gen_recognition_2_slopes(params_gen, tbl_hotspots, tbl_strat, tbl_test)
+  tbl_gen <- gen_recognition(params_gen, tbl_train, tbl_important, tbl_recognition)
   results_recover_bivar <- optim(
     params_init_2, ll_recognition_2_slopes, 
     tbl_hotspots = tbl_hotspots, 
-    tbl_strat = tbl_strat, 
+    tbl_strat = tbl_important, 
     tbl_test = tbl_gen[, c("x1", "x2", "resp_recode", "rt")],
     method = "Nelder-Mead", control = list(maxit = 1000)
   )
   results_recover_hotspot <- optim(
     params_init_1, ll_recognition_1_slope, 
     tbl_hotspots = tbl_hotspots, 
-    tbl_strat = tbl_strat, 
+    tbl_strat = tbl_important, 
     tbl_test = tbl_gen[, c("x1", "x2", "resp_recode", "rt")],
     sim_which = "sims_hotspots_z",
     method = "Nelder-Mead", control = list(maxit = 1000)
@@ -137,7 +198,7 @@ recovery_study <- function(
   results_recover_strat <- optim(
     params_init_1, ll_recognition_1_slope, 
     tbl_hotspots = tbl_hotspots, 
-    tbl_strat = tbl_strat, 
+    tbl_strat = tbl_important, 
     tbl_test = tbl_gen[, c("x1", "x2", "resp_recode", "rt")],
     sim_which = "sims_strat_z",
     method = "Nelder-Mead", control = list(maxit = 1000)
@@ -162,7 +223,7 @@ plan(multisession, workers = future::availableCores() - 2)
 l_recovery_results <- future_map(
   1:60, recovery_study,
   tbl_hotspots = tbl_hotspots,
-  tbl_strat = tbl_strat,
+  tbl_strat = tbl_important,
   tbl_test = tbl_test,
   params_init_1 = params_init_1,
   params_init_2 = params_init_2,

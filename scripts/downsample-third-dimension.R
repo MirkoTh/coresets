@@ -291,7 +291,7 @@ ggplot(tbl_cors %>% filter(model_2 %in% c(str_c("keep = ", 1:7), "GCM Forget", "
 
 
 
-# recovery of strategic sampling models -----------------------------------
+## recovery of strategic sampling models -----------------------------------
 
 
 c <- c(1, 1.5, 2, 2.5) #seq(.5, 2, length.out = 3) # 4
@@ -400,7 +400,7 @@ tbl_recover_strat_all_long %>%
   facet_wrap(~ c)
 
 
-# recovery of vanilla and forgetful models --------------------------------
+## recovery of vanilla and forgetful models --------------------------------
 
 
 c <- c(1, 1.5, 2, 2.5) #seq(.5, 2, length.out = 3) # 4
@@ -436,7 +436,7 @@ list_params_forgetful_vanilla <- c(list_params_forgetful, list_params_vanilla)
 if (is_fitting) {
   future::plan(multisession, workers = future::availableCores() - 2)
   l_results_vanilla_forgetful <- future_pmap(
-    .l = list(l_n_reps_forgetful_vanilla, list_params_forgetful_vanilla, list_params_forgetful_vanilla),
+    .l = list(l_n_reps_forgetful_vanilla, list_params_forgetful_vanilla, l_ks_forgetful_vanilla),
     .f = generate_and_fit, 
     tbl_train_orig = l_tbl_x_ii$train, 
     l_tbl_train_strat = l_tbl_important, 
