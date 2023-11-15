@@ -535,29 +535,29 @@ save_my_pdf_and_tiff <- function(pl, path_fl, w, h) {
 }
 
 
-sims_hotspot_strat <- function(w, sens, gamma, tbl_hotspots, tbl_strat, tbl_test) {
+sims_hotspot_strat <- function(w, sens, gamma, tbl_train, tbl_strat, tbl_test) {
   #' @description calculate similarities of test stimuli to originally
   #' presented stimuli and to strategically sampled stimuli
   #' @param w attentional weighting parameter
   #' @param sens sensitivity parameter (aka c)
   #' @param gamma response scaling parameter
-  #' @param tbl_hotspots presented data
+  #' @param tbl_train presented data
   #' @param tbl_strat imagined data
   #' @param tbl_test test data
   #' @return a list with both similarities
   #' 
   
-  # similarity on presented data
-  sims_hotspots <- pmap_dbl(
+  # similarity to presented data
+  sims_train <- pmap_dbl(
     tbl_test[, c("x1", "x2")], 
     ~ sum(pmap_dbl(
-      tbl_hotspots[, c("x1", "x2")], 
+      tbl_train[, c("x1", "x2")], 
       f_similarity, 
       c(w, 1 - w), sens[1], tibble(x1 = .x, x2 = .y), 1
     ))
   )
   
-  # similarity on strategically sampled data
+  # similarity to strategically sampled data
   sims_strat <- pmap_dbl(
     tbl_test[, c("x1", "x2")], 
     ~ sum(pmap_dbl(
@@ -567,19 +567,28 @@ sims_hotspot_strat <- function(w, sens, gamma, tbl_hotspots, tbl_strat, tbl_test
     ))
   )
   
-  # response scaling and z scaling
-  sims_strat_z <- scale(sims_strat ^ gamma)[, 1]
-  sims_hotspots_z <- scale(sims_hotspots ^ gamma)[, 1]
+  # response and z scaling on both similarities
+  sims_both <- c(sims_train, sims_strat)
+  sims_both_z <- scale(sims_both ^ gamma)[, 1]
+  sims_sum <- sims_train + sims_strat
+  sims_sum_z <- scale(sims_sum ^ gamma) [, 1]
+  
+  # separate again after scaling
+  sims_train_z <- sims_both_z[1:(length(sims_both_z)/2)]
+  sims_strat_z <- sims_both_z[(length(sims_both_z)/2 + 1) : length(sims_both_z)]
   
   return(list(
-    sims_strat_z = sims_strat_z, sims_hotspots_z = sims_hotspots_z
+    sims_strat_z = sims_strat_z,
+    sims_train_z = sims_train_z,
+    sims_sum_z = sims_sum_z,
+    sims_sum = sims_sum
   ))
   
 }
 
 
 gen_wiener <- function(
-    sim_hs, sim_strat, alpha, beta, tau, delta_ic, delta_sl1, n_reps, delta_sl2 = NULL
+    sim_train, sim_strat, alpha, beta, tau, delta_ic, delta_sl1, n_reps, delta_sl2 = NULL
 ) {
   #' @description generate recognition data with wiener likelihood 
   #' given similarities to presented and imagined data
@@ -589,7 +598,7 @@ gen_wiener <- function(
   
   if (is.null(delta_sl2)) {delta_sl2 <- 0}
   tbl_rt_gen <- as_tibble(map2_df(
-    sim_hs, sim_strat, 
+    sim_train, sim_strat, 
     ~ rwiener(
       n = n_reps, alpha = alpha, tau = tau, 
       beta = beta, delta = delta_ic + delta_sl1 *.x + delta_sl2 * .y
@@ -604,7 +613,7 @@ gen_wiener <- function(
   tbl_rt_gen$resp_recode <- tbl_rt_gen$resp
   tbl_rt_gen$resp <- fct_relabel(tbl_rt_gen$resp, ~ c("old", "new"))
   tbl_rt_gen$sim_strat_z <- rep(sim_strat, each = n_reps)
-  tbl_rt_gen$sim_hotspot_z <- rep(sim_hs, each = n_reps)
+  tbl_rt_gen$sim_hotspot_z <- rep(sim_train, each = n_reps)
   
   return(tbl_rt_gen)
 }
@@ -663,38 +672,120 @@ wiener_reg_delta_log <- function(x, my_tbl) {
 
 gen_recognition <- function(params, tbl_train, tbl_strat, tbl_test) {
   #' @description convenience function generating recognition responses
-  #' given global similarity computation of presented and imagined data
+  #' given global similarity computation of presented and prioritized/important data
   #' and wiener diffusion process while regressing drift rate on 
   #' these two similarities
   #' @return a tibble with the generated responses
   
   if("sens2" %in% names(params)) {
+    # sensitivity for all data points is the same
     l_sims <- sims_hotspot_strat(
       params$w, c(params$sens, params$sens2), params$gamma, tbl_train, tbl_strat, tbl_test
     )
   } else if(!"sens2" %in% names(params)) {
+    # sensitivity for strategically sampled data points is different
     l_sims <- sims_hotspot_strat(
       params$w, c(params$sens, params$sens), params$gamma, tbl_train, tbl_strat, tbl_test
     )
   }
-  if ("delta_sl2" %in% names(params)){
+  df_sims <- as.data.frame(reduce(map(l_sims, c), cbind))
+  
+  if("delta_sl2" %in% names(params)) {
+    d_sl2 <- params$delta_sl2
+    # both similarities individually affecting drift rate
     tbl_gen <- gen_wiener(
-      l_sims$sims_hotspots_z, l_sims$sims_strat_z,
+      l_sims$sims_train_z, l_sims$sims_strat_z,
       params$alpha, params$beta, params$tau,
-      params$delta_ic, params$delta_sl1, 1, delta_sl2 = params$delta_sl2
+      params$delta_ic, params$delta_sl1, 1, d_sl2
     )
-  } else if (!"delta_sl2" %in% names(params)){
+  } else if (!"delta_sl2" %in% names(params)) {
+    # only summed similarity affecting drift rate
     tbl_gen <- gen_wiener(
-      l_sims$sims_hotspots_z, l_sims$sims_strat_z,
+      l_sims$sims_sum_z, l_sims$sims_strat_z,
       params$alpha, params$beta, params$tau,
       params$delta_ic, params$delta_sl1, 1
     )
   }
-  
   tbl_gen$x1 <- tbl_test$x1
   tbl_gen$x2 <- tbl_test$x2
   tbl_gen$label <- tbl_test$label
-  return(tbl_gen)
+  
+  return(list(tbl_gen, df_sims))
+}
+
+ll_recognition_1_1 <- function(x, tbl_train, tbl_strat, tbl_test, lo, hi) {
+  #' @description helper function to calculate neg 2 * LL fitting 
+  #' parameters of representation model and decision model
+  #' assuming two similarities affect drift rate
+  #' @return the value of the -2 * LL
+  #'
+  x <- pmap(list(x, lo, hi), upper_and_lower_bounds_revert)
+  l_sims <- sims_hotspot_strat(
+    x[["w"]], c(x[["sens"]], x[["sens"]]), x[["gamma"]], tbl_train, tbl_strat, tbl_test
+  )
+  # one sensitivity and two drift rates?
+  tbl_test$pred_lr1 <- l_sims$sims_sum_z
+  # pred_lr2 is ignored when only one regression coefficient is provided to winer_reg_delta_log
+  tbl_test$pred_lr2 <- 0
+  neg2ll <- wiener_reg_delta_log(x, tbl_test)
+  
+  return(neg2ll)
+}
+
+ll_recognition_1_2 <- function(x, tbl_train, tbl_strat, tbl_test, lo, hi) {
+  #' @description helper function to calculate neg 2 * LL fitting 
+  #' parameters of representation model and decision model
+  #' assuming two similarities affect drift rate
+  #' @return the value of the -2 * LL
+  #'
+  x <- pmap(list(x, lo, hi), upper_and_lower_bounds_revert)
+  l_sims <- sims_hotspot_strat(
+    x[["w"]], c(x[["sens"]], x[["sens"]]), x[["gamma"]], tbl_train, tbl_strat, tbl_test
+  )
+  tbl_test$pred_lr1 <- l_sims$sims_train_z
+  tbl_test$pred_lr2 <- l_sims$sims_strat_z
+  
+  neg2ll <- wiener_reg_delta_log(x, tbl_test)
+  
+  return(neg2ll)
+}
+
+ll_recognition_2_1 <- function(x, tbl_train, tbl_strat, tbl_test, lo, hi) {
+  #' @description helper function to calculate neg 2 * LL fitting 
+  #' parameters of representation model and decision model
+  #' assuming two similarities affect drift rate
+  #' @return the value of the -2 * LL
+  #'
+  x <- pmap(list(x, lo, hi), upper_and_lower_bounds_revert)
+  l_sims <- sims_hotspot_strat(
+    x[["w"]], c(x[["sens"]], x[["sens2"]]), x[["gamma"]], tbl_train, tbl_strat, tbl_test
+  )
+  
+  tbl_test$pred_lr1 <- l_sims$sims_sum_z
+  tbl_test$pred_lr2 <- 0
+  neg2ll <- wiener_reg_delta_log(x, tbl_test)
+  
+  return(neg2ll)
+}
+
+ll_recognition_2_2 <- function(x, tbl_train, tbl_strat, tbl_test, lo, hi) {
+  #' @description helper function to calculate neg 2 * LL fitting 
+  #' parameters of representation model and decision model
+  #' assuming two similarities affect drift rate
+  #' @return the value of the -2 * LL
+  #'
+  
+  x <- pmap(list(x, lo, hi), upper_and_lower_bounds_revert)
+  l_sims <- sims_hotspot_strat(
+    x[["w"]], c(x[["sens"]], x[["sens2"]]), x[["gamma"]], tbl_train, tbl_strat, tbl_test
+  )
+  # two sensitivities and one drift rate?
+  tbl_test$pred_lr1 <- l_sims$sims_train_z
+  tbl_test$pred_lr2 <- l_sims$sims_strat_z
+
+  neg2ll <- wiener_reg_delta_log(x, tbl_test)
+  
+  return(neg2ll)
 }
 
 ll_recognition <- function(x, tbl_train, tbl_strat, tbl_test, lo, hi) {
@@ -708,20 +799,26 @@ ll_recognition <- function(x, tbl_train, tbl_strat, tbl_test, lo, hi) {
     l_sims <- sims_hotspot_strat(
       x[["w"]], c(x[["sens"]], x[["sens2"]]), x[["gamma"]], tbl_train, tbl_strat, tbl_test
     )
+    # two sensitivities and one drift rate?
+    tbl_test$pred_lr1 <- l_sims$sims_train_z
+    
   } else if (!"sens2" %in% names(x)){
     l_sims <- sims_hotspot_strat(
       x[["w"]], c(x[["sens"]], x[["sens"]]), x[["gamma"]], tbl_train, tbl_strat, tbl_test
     )
+    # one sensitivity and two drift rates?
+    tbl_test$pred_lr1 <- l_sims$sims_sum_z
+    
   }
-  tbl_test$pred_lr1 <- l_sims$sims_hotspots_z
+  # pred_lr2 is ignored when only one regression coefficient is provided to winer_reg_delta_log
   tbl_test$pred_lr2 <- l_sims$sims_strat_z
-  neg2ll <- wiener_reg2_delta_log(x, tbl_test)
+  neg2ll <- wiener_reg_delta_log(x, tbl_test)
   
   return(neg2ll)
 }
 
 
-ll_recognition_2_slopes <- function(x, tbl_hotspots, tbl_strat, tbl_test) {
+ll_recognition_2_slopes <- function(x, tbl_train, tbl_strat, tbl_test) {
   #' @description helper function to calculate neg 2 * LL fitting 
   #' parameters of representation model and decision model
   #' assuming two similarities affect drift rate
@@ -729,16 +826,16 @@ ll_recognition_2_slopes <- function(x, tbl_hotspots, tbl_strat, tbl_test) {
   #'
   x <- pmap(list(x, lo2, hi2), upper_and_lower_bounds_revert)
   l_sims <- sims_hotspot_strat(
-    x[["w"]], x[["sens"]], x[["gamma"]], tbl_hotspots, tbl_strat, tbl_test
+    x[["w"]], x[["sens"]], x[["gamma"]], tbl_train, tbl_strat, tbl_test
   )
-  tbl_test$pred_lr1 <- l_sims$sims_hotspots_z
+  tbl_test$pred_lr1 <- l_sims$sims_train_z
   tbl_test$pred_lr2 <- l_sims$sims_strat_z
   neg2ll <- wiener_reg2_delta_log(x, tbl_test)
   
   return(neg2ll)
 }
 
-ll_recognition_1_slope <- function(x, tbl_hotspots, tbl_strat, tbl_test, sim_which) {
+ll_recognition_1_slope <- function(x, tbl_train, tbl_strat, tbl_test, sim_which) {
   #' @description helper function to calculate neg 2 * LL fitting 
   #' parameters of representation model and decision model
   #' assuming only one similarity affects drift rate
@@ -746,7 +843,7 @@ ll_recognition_1_slope <- function(x, tbl_hotspots, tbl_strat, tbl_test, sim_whi
   #'   
   x <- pmap(list(x, lo1, hi1), upper_and_lower_bounds_revert)
   l_sims <- sims_hotspot_strat(
-    x[["w"]], x[["sens"]], x[["gamma"]], tbl_hotspots, tbl_strat, tbl_test
+    x[["w"]], x[["sens"]], x[["gamma"]], tbl_train, tbl_strat, tbl_test
   )
   tbl_test$pred_lr <- l_sims[[sim_which]]
   neg2ll <- wiener_reg1_delta_log(x, tbl_test)

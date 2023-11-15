@@ -41,6 +41,7 @@ library(rutils)
 library(cmdstanr)
 library(RWiener)
 conflicts_prefer(RWiener::rwiener)
+conflicts_prefer(dplyr::filter)
 
 
 path_load <- c("utils/utils.R", "scripts/stan-wiener.R")
@@ -73,12 +74,12 @@ tbl_train_not_important <- tbl_train %>%
   select(-rank_importance)
 
 params_gen <- list(
-  w = .5, sens = 15, gamma = .2, 
+  w = .5, sens = 2, gamma = .2, 
   alpha = 1.3, beta = .55, tau = .25, 
   delta_ic = .9, delta_sl1 = 3, 
   # the following two parameters are optional
   delta_sl2 = 1,
-  sens2 = 20
+  sens2 = 4
 )
 
 x <- params_gen
@@ -99,13 +100,17 @@ params_gen_2_sens_1_slope <- params_gen[!names(params_gen) %in% c("delta_sl2")]
 params_gen_1_sens_2_slopes <- params_gen[!names(params_gen) %in% c("sens2")]
 params_gen_2_sens_2_slopes <- params_gen
 
+tbl_gen_1_sens_1_slope <- gen_recognition(params_gen_1_sens_1_slope, tbl_train_not_important, tbl_important, tbl_recognition)[[1]]
+tbl_gen_2_sens_1_slope <- gen_recognition(params_gen_2_sens_1_slope, tbl_train_not_important, tbl_important, tbl_recognition)[[1]]
+tbl_gen_1_sens_2_slopes <- gen_recognition(params_gen_1_sens_2_slopes, tbl_train_not_important, tbl_important, tbl_recognition)[[1]]
+tbl_gen_2_sens_2_slopes <- gen_recognition(params_gen_2_sens_2_slopes, tbl_train_not_important, tbl_important, tbl_recognition)[[1]]
 
-tbl_gen_1_sens_1_slope <- gen_recognition(params_gen_1_sens_1_slope, tbl_train_not_important, tbl_important, tbl_recognition)
-tbl_gen_2_sens_1_slope <- gen_recognition(params_gen_2_sens_1_slope, tbl_train_not_important, tbl_important, tbl_recognition)
-tbl_gen_1_sens_2_slopes <- gen_recognition(params_gen_1_sens_2_slopes, tbl_train_not_important, tbl_important, tbl_recognition)
-tbl_gen_2_sens_2_slopes <- gen_recognition(params_gen_2_sens_2_slopes, tbl_train_not_important, tbl_important, tbl_recognition)
-
+# plausibility checks
 tbl_gen_1_sens_1_slope %>%
+  group_by(label) %>%
+  count(resp)
+
+tbl_gen_1_sens_2_slopes %>%
   group_by(label) %>%
   count(resp)
 
@@ -130,87 +135,112 @@ start_vals_2 <- list(
   sens2 = 15
 )
 
-lo_2_2 <- c(.01, 0, .01, 4, .9, .2, 5, 5, 5, 0)
-hi_2_2 <- c(.99, 40, .99, .1, .1, .4, .01, .01, .01, 40)
-params <- pmap(list(start_vals_2, lo_2_2, hi_2_2), upper_and_lower_bounds)
+lo <- c(.01, 0, .01, 4, .9, .2, 5, 5, 5, 0)
+hi <- c(.99, 40, .99, .1, .1, .4, .01, .01, .01, 40)
+params_init_2_2 <- pmap(list(start_vals_2, lo, hi), upper_and_lower_bounds)
 # notation _1_2 means one sensitivity and two variables regressed on drift rate
-params_init_2_2 <- params
-params_init_1_1 <- params[1:8]
-params_init_2_1 <- params[c(1:8, 10)]
-params_init_1_2 <- params[1:9]
-lo_1_1 <- lo_2_2[1:8]
-hi_1_1 <- hi_2_2[1:8]
-lo_2_1 <- lo_2_2[c(1:8, 10)]
-hi_2_1 <- hi_2_2[c(1:8, 10)]
-lo_1_2 <- lo_2_2[1:9]
-hi_1_2 <- hi_1_2[1:9]
 
 
-params_gen_sc <- pmap(list(params_gen, lo2, hi2), upper_and_lower_bounds)
 
 # testing
-ll_recognition(
-  params_gen_2_sens_1_slope,
+
+tbl_gen_2_sens_1_slopes <- gen_recognition(params_gen_2_sens_1_slope, tbl_train_not_important, tbl_important, tbl_recognition)[[1]]
+
+
+ll_recognition_1_1(
+  pmap(list(params_gen_1_sens_1_slope, as.list(lo[1:8]), as.list(hi[1:8])), upper_and_lower_bounds),
   tbl_train_not_important,
   tbl_important,
-  tbl_gen_2_sens_1_slope[, c("x1", "x2", "resp_recode", "rt")],
-  lo_2_1, hi_2_1
+  tbl_gen_2_sens_1_slopes[, c("x1", "x2", "resp_recode", "rt")],
+  lo[1:8], hi[1:8]
 )
 
 
-ll_recognition_2_slopes(
-  params_gen_2_sens_2_slopes, tbl_train, tbl_important, 
-  tbl_gen_2[, c("x1", "x2", "resp_recode", "rt")]
+ll_recognition_1_2(
+  pmap(list(params_gen_1_sens_2_slopes, as.list(lo[1:9]), as.list(hi[1:9])), upper_and_lower_bounds),
+  tbl_train_not_important,
+  tbl_important,
+  tbl_gen_2_sens_1_slopes[, c("x1", "x2", "resp_recode", "rt")],
+  lo[1:9], hi[1:9]
 )
 
-ll_recognition_1_slope(
-  params_gen[1:8], tbl_train, tbl_important, 
-  tbl_gen_2[, c("x1", "x2", "resp_recode", "rt")], "sims_hotspots_z"
+
+ll_recognition_2_1(
+  pmap(list(params_gen_2_sens_1_slope, as.list(lo[c(1:8, 10)]), as.list(hi[c(1:8, 10)])), upper_and_lower_bounds),
+  tbl_train_not_important,
+  tbl_important,
+  tbl_gen_2_sens_1_slopes[, c("x1", "x2", "resp_recode", "rt")],
+  lo[c(1:8, 10)], hi[c(1:8, 10)]
 )
 
-ll_recognition_1_slope(
-  params_gen[1:8], tbl_train, tbl_important, 
-  tbl_gen_2[, c("x1", "x2", "resp_recode", "rt")], "sims_strat_z"
+
+ll_recognition_2_2(
+  pmap(list(params_gen_2_sens_2_slopes, as.list(lo), as.list(hi)), upper_and_lower_bounds),
+  tbl_train_not_important,
+  tbl_important,
+  tbl_gen_2_sens_1_slopes[, c("x1", "x2", "resp_recode", "rt")],
+  lo, hi
 )
+
 
 
 
 recovery_study <- function(
-    i, tbl_hotspots, tbl_important, tbl_test, 
-    params_init_1, params_init_2, params_gen
+    i, n_reps, tbl_train, tbl_important, tbl_test, 
+    params_init_2_2, params_gen,
+    string_save
 ) {
-  tbl_gen <- gen_recognition(params_gen, tbl_train, tbl_important, tbl_recognition)
-  results_recover_bivar <- optim(
-    params_init_2, ll_recognition_2_slopes, 
-    tbl_hotspots = tbl_hotspots, 
+  params_init_1_1 <- params_init_2_2[1:8]
+  params_init_1_2 <- params_init_2_2[1:9]
+  params_init_2_1 <- params_init_2_2[c(1:8, 10)]
+  
+  tbl_recognition_rep <- repeat_tibble(tbl_recognition, n_reps)
+  tbl_gen <- gen_recognition(params_gen, tbl_train, tbl_important, tbl_recognition_rep)
+  results_recover_1_1 <- optim(
+    params_init_1_1, ll_recognition_1_1, 
+    tbl_train = tbl_train, 
     tbl_strat = tbl_important, 
-    tbl_test = tbl_gen[, c("x1", "x2", "resp_recode", "rt")],
+    tbl_test = tbl_gen[[1]][, c("x1", "x2", "resp_recode", "rt")],
+    lo = lo[1:8],
+    hi = hi[1:8],
     method = "Nelder-Mead", control = list(maxit = 1000)
   )
-  results_recover_hotspot <- optim(
-    params_init_1, ll_recognition_1_slope, 
-    tbl_hotspots = tbl_hotspots, 
+  results_recover_1_2 <- optim(
+    params_init_1_2, ll_recognition_1_2, 
+    tbl_train = tbl_train, 
     tbl_strat = tbl_important, 
-    tbl_test = tbl_gen[, c("x1", "x2", "resp_recode", "rt")],
-    sim_which = "sims_hotspots_z",
+    tbl_test = tbl_gen[[1]][, c("x1", "x2", "resp_recode", "rt")],
+    lo = lo[1:9],
+    hi = hi[1:9],
     method = "Nelder-Mead", control = list(maxit = 1000)
   )
-  results_recover_strat <- optim(
-    params_init_1, ll_recognition_1_slope, 
-    tbl_hotspots = tbl_hotspots, 
+  results_recover_2_1 <- optim(
+    params_init_2_1, ll_recognition_2_1, 
+    tbl_train = tbl_train, 
     tbl_strat = tbl_important, 
-    tbl_test = tbl_gen[, c("x1", "x2", "resp_recode", "rt")],
-    sim_which = "sims_strat_z",
+    tbl_test = tbl_gen[[1]][, c("x1", "x2", "resp_recode", "rt")],
+    lo = lo[c(1:8, 10)],
+    hi = hi[c(1:8, 10)],
+    method = "Nelder-Mead", control = list(maxit = 1000)
+  )
+  results_recover_2_2 <- optim(
+    params_init_2_2, ll_recognition_2_2, 
+    tbl_train = tbl_train, 
+    tbl_strat = tbl_important, 
+    tbl_test = tbl_gen[[1]][, c("x1", "x2", "resp_recode", "rt")],
+    lo = lo,
+    hi = hi,
     method = "Nelder-Mead", control = list(maxit = 1000)
   )
   l_out <- list(
     it = i,
-    bivar = results_recover_bivar,
-    hotspot = results_recover_hotspot,
-    strat = results_recover_strat
+    '1_1' = results_recover_1_1,
+    '1_2' = results_recover_1_2,
+    '2_1' = results_recover_2_1,
+    '2_2' = results_recover_2_2
   )
   saveRDS(l_out, file = str_c(
-    "data/representation-and-decision/recovery-representation-and-decision-", i, ".RDS"
+    "data/representation-and-decision/recovery-representation-and-decision-", string_save, "-", i, ".RDS"
   ))
   
   return(l_out)
@@ -218,55 +248,143 @@ recovery_study <- function(
 
 
 
-plan(multisession, workers = future::availableCores() - 2)
+# one sensitivity and, but two similarities affecting drift rate differently
+n_datasets <- 4*14
 
-l_recovery_results <- future_map(
-  1:60, recovery_study,
-  tbl_hotspots = tbl_hotspots,
-  tbl_strat = tbl_important,
-  tbl_test = tbl_test,
-  params_init_1 = params_init_1,
-  params_init_2 = params_init_2,
-  params_gen = params_gen,
+# 1 1
+t_start <- Sys.time()
+plan(multisession, workers = future::availableCores() - 2)
+l_recovery_results_1_1 <- future_map2(
+  1:n_datasets, rep(1, n_datasets) , recovery_study,
+  tbl_train = tbl_train_not_important,
+  tbl_important = tbl_important,
+  tbl_test = tbl_recognition,
+  params_init_2_2 = params_init_2_2,
+  params_gen = params_gen_1_sens_1_slope,
+  string_save = "gen-1-1",
   .progress = TRUE, .options = furrr_options(seed = TRUE)
-)  
+)
+future::plan("default")
+beepr::beep()
+t_end <- Sys.time()
+round(t_end - t_start, 1)
+
+# 1 2
+t_start <- Sys.time()
+plan(multisession, workers = future::availableCores() - 2)
+l_recovery_results_1_2 <- future_map2(
+  1:n_datasets, rep(1, n_datasets) , recovery_study,
+  tbl_train = tbl_train_not_important,
+  tbl_important = tbl_important,
+  tbl_test = tbl_recognition,
+  params_init_2_2 = params_init_2_2,
+  params_gen = params_gen_1_sens_2_slopes,
+  string_save = "gen-1-2",
+  .progress = TRUE, .options = furrr_options(seed = TRUE)
+)
+future::plan("default")
+beepr::beep()
+t_end <- Sys.time()
+round(t_end - t_start, 1)
+
+# 2 1
+t_start <- Sys.time()
+plan(multisession, workers = future::availableCores() - 2)
+l_recovery_results_2_1 <- future_map2(
+  1:n_datasets, rep(1, n_datasets) , recovery_study,
+  tbl_train = tbl_train_not_important,
+  tbl_important = tbl_important,
+  tbl_test = tbl_recognition,
+  params_init_2_2 = params_init_2_2,
+  params_gen = params_gen_2_sens_1_slope,
+  string_save = "gen-2-1",
+  .progress = TRUE, .options = furrr_options(seed = TRUE)
+)
+future::plan("default")
+beepr::beep()
+t_end <- Sys.time()
+round(t_end - t_start, 1)
+
+# 2 2
+t_start <- Sys.time()
+plan(multisession, workers = future::availableCores() - 2)
+l_recovery_results_2_2 <- future_map2(
+  1:n_datasets, rep(1, n_datasets) , recovery_study,
+  tbl_train = tbl_train_not_important,
+  tbl_important = tbl_important,
+  tbl_test = tbl_recognition,
+  params_init_2_2 = params_init_2_2,
+  params_gen = params_gen_2_sens_2_slopes,
+  string_save = "gen-2-2",
+  .progress = TRUE, .options = furrr_options(seed = TRUE)
+)
+future::plan("default")
+beepr::beep()
+t_end <- Sys.time()
+round(t_end - t_start, 1)
+
+
+
+
 
 file_paths <- str_c("data/representation-and-decision/", dir("data/representation-and-decision/"))
 l_recovery_results <- map(file_paths, readRDS)
 
-ll_bivar <- map_dbl(map(l_recovery_results, "bivar"), "value")
-ll_hotspot <- map_dbl(map(l_recovery_results, "hotspot"), "value")
-ll_strat <- map_dbl(map(l_recovery_results, "strat"), "value")
+ll_1_1 <- map_dbl(map(l_recovery_results_1_1, "1_1"), "value")
+ll_1_2 <- map_dbl(map(l_recovery_results_1_1, "1_2"), "value")
+ll_2_1 <- map_dbl(map(l_recovery_results_1_1, "2_1"), "value")
+ll_2_2 <- map_dbl(map(l_recovery_results_1_1, "2_2"), "value")
 
-tbl_lls <- as_tibble(cbind(ll_bivar, ll_hotspot, ll_strat))
+tbl_lls <- as_tibble(cbind(ll_1_1, ll_1_2, ll_2_1, ll_2_2))
 tbl_lls$it <- 1:nrow(tbl_lls)
 
-tbl_lls_long <- tbl_lls %>% mutate(
-  n_reps = 1,
-  n_data = n_reps * 330,
-  bic_bivar = ll_bivar + 9*log(n_data), 
-  bic_hotspot = ll_hotspot + 8*log(n_data), 
-  bic_strat = ll_strat + 8*log(n_data), 
-  aic_bivar = ll_bivar + 18,
-  aic_hotspot = ll_hotspot + 16,
-  aic_strat = ll_strat + 16,
-  is_recovered_ll = ll_bivar == pmin(ll_bivar, ll_hotspot, ll_strat),
-  is_recovered_bic = bic_bivar == pmin(bic_bivar, bic_hotspot, bic_strat),
-  is_recovered_aic = aic_bivar == pmin(aic_bivar, aic_hotspot, aic_strat), 
-) %>%
-  pivot_longer(c(bic_bivar, bic_hotspot, bic_strat)) %>%
+tbl_lls <- tbl_lls %>% mutate(
+  n_data = c(rep(122, 14), rep(244, 14)),
+  bic_1_1 = ll_1_1 + 8*log(n_data), 
+  bic_1_2 = ll_1_2 + 9*log(n_data), 
+  bic_2_1 = ll_2_1 + 9*log(n_data), 
+  bic_2_2 = ll_2_2 + 10*log(n_data), 
+  aic_1_1 = ll_1_1 + 16, 
+  aic_1_2 = ll_1_2 + 18, 
+  aic_2_1 = ll_2_1 + 18, 
+  aic_2_2 = ll_2_2 + 20, 
+  bic_min = pmin(bic_1_1, bic_1_2, bic_2_1, bic_2_2),
+  is_recovered_ll = ll_1_1 == pmin(ll_1_1, ll_1_2, ll_2_1, ll_2_2),
+  is_recovered_bic = bic_1_1 == bic_min,
+  is_recovered_aic = aic_1_1 == pmin(aic_1_1, aic_1_2, aic_2_1, aic_2_2)
+) 
+
+
+
+tbl_lls_long <- tbl_lls %>%
+  select(it, n_data, bic_1_1, bic_1_2, bic_2_1, bic_2_2, is_recovered_bic, bic_min) %>%
+  pivot_longer(c(bic_1_1, bic_1_2, bic_2_1, bic_2_2)) %>%
   #pivot_longer(c(aic_bivar, aic_hotspot, aic_strat)) %>%
   #pivot_longer(c(ll_bivar, ll_hotspot, ll_strat)) %>%
-  group_by(n_reps, it) %>% mutate(rwn = row_number(it)) %>% ungroup() %>%
   mutate(name = factor(name))
 
-levels(tbl_lls_long$name) <- c("Bivariate", "Hotspot", "Strategic")
+levels(tbl_lls_long$name) <- c("1 Sim, 1 Drift", "1 Sim, 2 Drifts", "2 Sims, 1 Drift", "2 Sims, 2 Drifts")
 
 tbl_recovered_agg <- grouped_agg(
-  tbl_lls_long %>% filter(rwn == 1), 
-  c(name, n_reps), 
-  c(is_recovered_ll, is_recovered_bic, is_recovered_aic)
-)
+  tbl_lls_long %>% filter(bic_min == value), 
+  c(name, n_data), #  
+  c(is_recovered_bic)
+) %>% select(name, n_data, n) %>%
+  mutate(model_in = "1 Sim, 1 Drift")
+
+ggplot(tbl_recovered_agg, aes(model_in, name)) +
+  geom_tile(aes(fill = n), show.legend = FALSE) +
+  geom_label(aes(label = n)) +
+  facet_wrap(~ n_data) + 
+  theme_bw() +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "Model In", y = "Model Out") +
+  theme(
+    strip.background = element_rect(fill = "white"),
+    text = element_text(size = 16)
+  )
+
 
 ggplot(tbl_lls_long, aes(value, group = name)) +
   geom_histogram(fill = "skyblue2", color = "black") +
@@ -276,7 +394,7 @@ ggplot(tbl_lls_long, aes(value, group = name)) +
       y = tbl_recovered_agg$n[1]/6, 
       label = str_c("p (recov.) = ", round(mean_is_recovered_bic, 2))
     )
-  ) + facet_grid(name ~ n_reps) +
+  ) + facet_wrap(~ name) + # facet_grid(name ~ n_reps) +
   theme_bw() +
   scale_x_continuous(expand = c(0, 0)) +
   scale_y_continuous(expand = c(0, 0)) +
