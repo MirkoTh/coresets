@@ -49,7 +49,16 @@ train_and_transfer_sets <- function(x1, x2) {
 # simulate responses using assumed difficulty function
 l_tbl_x_ii <- map2(l_x1, l_x2, train_and_transfer_sets) %>%
   map(., simulate_responses)
-plot_grid(l_tbl_x_ii$train) + geom_abline()
+plot_grid(l_tbl_x_ii$train) + geom_abline() + 
+  theme_bw() +
+  scale_x_continuous(expand = c(.1, 0)) +
+  scale_y_continuous(expand = c(.01, 0)) +
+  labs(x = "Length", y = "Orientation") +
+  theme(
+    strip.background = element_rect(fill = "white"),
+    text = element_text(size = 16)
+  )
+
 
 
 if (is_fitting) {
@@ -210,6 +219,27 @@ ggplot(l_tbl_important[[6]], aes(x1, x2)) +
   scale_size_continuous(guide = "none", range = c(2.5, 6))
 
 
+l_tbl_changes_down <- list()
+for (i in 1:length(l_tbl_important)) {
+  l_tbl_changes_down[[i]] <- mark_changes(l_tbl_important[[i]], l_tbl_x_ii$train %>% mutate(cat_structure = "Information Integration"))
+}
+
+# tbl_down_marked <- l_tbl_changes_down[[2]] %>% left_join(l_tbl_important[[2]] %>% select(x1, x2, rank_importance), by = c("x1", "x2"))
+pl2 <- plot_new_and_dropped(tbl_down_marked) +
+  geom_label(
+    data = tbl_down_marked %>% filter(!is.na(rank_importance)), 
+    aes(label = rank_importance - 1, size = rank_importance, color = category)
+  ) +
+  scale_size_continuous(range = c(.5, 7), guide = "none") +
+  labs(x = expression(x[1]), y = expression(x[2]), title = "K = 2") +
+  theme_bw() +
+  scale_x_continuous(expand = c(0.03, 0)) +
+  scale_y_continuous(expand = c(0.03, 0)) +
+  theme(
+    strip.background = element_rect(fill = "white"),
+    text = element_text(size = 16)
+  )
+# grid.draw(arrangeGrob(pl2, pl5, nrow = 1))
 
 # compare model predictions -----------------------------------------------
 
@@ -314,7 +344,7 @@ l_info <- list(
   lo = lo, 
   hi = hi
 )
-is_fitting <- TRUE
+is_fitting <- FALSE
 if (is_fitting) {
   future::plan(multisession, workers = future::availableCores() - 2)
   l_results_strategic <- future_pmap(

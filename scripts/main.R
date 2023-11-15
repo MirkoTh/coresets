@@ -19,7 +19,7 @@ walk(path_load, source)
 # squared structure as in rep change project
 # information integration condition using the identity function as decision boundary
 
-# information integration
+# squares
 x1 <- seq(1, 6, by = 1)
 x2 <- seq(1, 6, by = 1)
 tbl_x_ii <- crossing(x1, x2)
@@ -402,21 +402,12 @@ plot_grid(tbl_important_up)
 # downsampling only on majority category
 # takes about 6.5 mins for 150 stimuli in majority category on laptop
 # takes about 8.4 mins for 150 stimuli in majority category on lab computer
-m_gcm <- list()
-m_gcm$name <- "gcm"
-m_gcm$f_likelihood <- gcm_likelihood_no_forgetting
-m_gcm$params <- params_fin$tf
-m_gcm$n_feat <- 2
-m_gcm$d_measure <- 1
-m_gcm$lo <- lo[1:3]
-m_gcm$hi <- hi[1:3]
-
 l_tbl_important_down <- list()
 t_start <- Sys.time()
 l_tbl_important_down <- importance_downsampling(
-  tbl_imb_weighted[, cols_req], m_gcm, 
-  tbl_transfer %>% mutate(response = category),
-  cat_down = 0, n_keep_max = n_unique_per_category
+  tbl_imb_weighted[, cols_req], params_fin$tf, 
+  tbl_transfer %>% mutate(response = category), n_feat = 2, d_measure = 1, 
+  lo = lo[1:3], hi = hi[1:3], cat_down = 0, n_keep_max = n_unique_per_category
 )
 t_end <- Sys.time()
 round(t_end - t_start, 1)
@@ -439,8 +430,6 @@ for (i in 1:length(l_tbl_important_up)) {
 }
 
 saveRDS(l_tbl_up_and_down, "data/l_tbl_up_and_down.RDS")
-l_tbl_up_and_down <- readRDS("data/l_tbl_up_and_down.RDS")
-
 
 
 plot_grid(tbl_up_and_down)
@@ -482,13 +471,6 @@ grid.draw(arrangeGrob(pl_points_obs, pl_points_transfer, pl_points_importance, n
 # 10 reps: 6
 # 15 reps: 
 # 20 reps: 20
-
-# data required to put the model-recovery into a separate file:
-# tbl_imb_weighted
-# l_tbl_up_and_down
-l_tbl_up_and_down <- readRDS("data/l_tbl_up_and_down.RDS")
-tbl_transfer
-
 
 
 plot_grid(tbl_imb_weighted)
