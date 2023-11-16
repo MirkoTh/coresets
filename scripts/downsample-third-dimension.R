@@ -570,17 +570,61 @@ tbl_recover_vanilla_forgetful_all_long %>%
 # parameter recovery ------------------------------------------------------
 
 
-
 # only plain vanilla gcm
+# save generated datasets, generating parameters, and recovered parameters for akshay
+
+c <- c(1, 1.5, 2, 2.5) #seq(.5, 2, length.out = 3) # 4
+w <- c(.5, .75) #seq(.2, .8, length.out = 3) # 4
+bias <- c(.5, .75) #seq(.2, .8, length.out = 3) # 3
+delta <- c(.5, .95)
+delta_absent <- NA
+n_reps <- c(5, 10)
+k <- NA
+tbl_params_vanilla <- crossing(c, w, bias, n_reps)
+
+list_params_vanilla <- pmap(tbl_params_vanilla[, c("c", "w", "bias")], ~ list(
+  not_tf = c(c = ..1, w = ..2, bias = ..3),
+  tf = upper_and_lower_bounds(c(c = ..1, w = ..2, bias = ..3), lo[1:3], hi[1:3])
+))
+l_n_reps_vanilla <- map(tbl_params_vanilla$n_reps, 1)
+
+l_info <- list(
+  n_feat = n_feat, 
+  d_measure = d_measure, 
+  lo = lo[1:3], 
+  hi = hi[1:3]
+)
+
+if (is_fitting) {
+  future::plan(multisession, workers = future::availableCores() - 2)
+  l_results_vanilla <- future_pmap(
+    .l = list(l_n_reps_vanilla, list_params_vanilla),
+    .f = generate_and_fit_vanilla_only, 
+    tbl_train_orig = l_tbl_x_ii$train, 
+    tbl_transfer = l_tbl_x_ii$transfer, 
+    l_info = l_info,
+    .progress = TRUE,
+    .options = furrr_options(seed = NULL)
+  )
+  future::plan("default")
+  saveRDS(l_results_vanilla, file = "data/recover-vanilla-akshay.RDS")
+} else if (!is_fitting) {
+  l_results_vanilla <- readRDS("data/recover-vanilla-akshay.RDS")
+}
+
 
 tbl_param_recovery_vanilla <- cbind(
-  tbl_params_vanilla_forgetful, 
+  tbl_params_vanilla, 
   reduce(
-    map(map(l_results_vanilla_forgetful, "params_orig"), "not_tf"),
+    map(map(l_results_vanilla, "params_orig"), "not_tf"),
     rbind
   ) %>% as.data.frame() %>% as_tibble() %>%
     rename(c_out = c, w_out = w, bias_out = bias)
-) %>% as_tibble() %>% filter(delta < .1)
+) %>% as_tibble() %>%
+  mutate(n_data = n_reps *56) %>% select(-n_reps)
+
+write_csv(tbl_param_recovery_vanilla, "data/recovery-vanilla/tbl-params.csv")
+read_csv("data/recovery-vanilla/tbl-params.csv")
 
 tbl_param_recovery_vanilla %>%
   pivot_longer(cols = c(c, w, bias), names_to = "parameter_in", values_to = "value_in") %>%
