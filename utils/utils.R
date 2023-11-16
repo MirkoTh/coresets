@@ -528,6 +528,55 @@ generate_and_fit <- function(n_reps, params, k, tbl_train_orig, l_tbl_train_stra
   ))
 }
 
+generate_and_fit_vanilla_only <- function(n_reps, params, tbl_train_orig, tbl_transfer, l_info) {
+  #' @description generate data given model and strategically sampled data
+  #' and fit them given strategically sampled data or originally presented data
+  #' 
+  #' n_feat, d_measure, lo, hi
+  
+  # randomize trial id in each recovery iteration
+  tbl_transfer_rep <- repeat_tibble(tbl_transfer, n_reps)
+  tbl_transfer_rep$trial_id <- sample(1:nrow(tbl_transfer_rep), nrow(tbl_transfer_rep), replace = FALSE)
+  tbl_transfer_rep$response <- tbl_transfer_rep$category # to get p(correct) out
+  tbl_train_orig$trial_id <- sample(1:nrow(tbl_train_orig), nrow(tbl_train_orig), replace = FALSE)
+  
+  
+  tbl_generate <- generate_data(params, tbl_transfer_rep, tbl_train_orig, l_info$n_feat, l_info$d_measure, l_info$lo, l_info$hi)
+  cat("data generated")
+  
+  
+  # starting values
+  params_init <- c(c = 1, w = .5, bias = .5)
+  params_init_tf <- pmap(list(params_init, l_info$lo, l_info$hi), upper_and_lower_bounds)
+  
+  results_orig <- optim(
+    params_init_tf,
+    gcm_likelihood_no_forgetting,
+    tbl_transfer = tbl_generate,
+    tbl_x = tbl_train_orig, 
+    n_feat = l_info$n_feat,
+    d_measure = l_info$d_measure,
+    lo = l_info$lo,
+    hi = l_info$hi
+  )
+  
+  params_orig <- list()
+  params_orig[["not_tf"]] <- pmap_dbl(list(results_orig$par, l_info$lo, l_info$hi), upper_and_lower_bounds_revert)
+  params_orig[["tf"]] <- results_orig$par
+  
+  n2lls <- list()
+  n2lls[["original"]] <- results_orig$value
+  
+  path_save <- str_c("data/recovery-vanilla/", "n_data=", nrow(tbl_generate), ",c=", params$not_tf[["c"]], ",w=", params$not_tf[["w"]], ",bias=",params$not_tf[["bias"]])
+  write_csv(tbl_generate, file = str_c(path_save, "-transfer.csv"))
+  write_csv(tbl_train_orig, file = str_c(path_save, "-train.csv"))
+  
+  return(list(
+    n2lls = n2lls, 
+    params_orig = params_orig
+  ))
+}
+
 
 save_my_pdf_and_tiff <- function(pl, path_fl, w, h) {
   save_my_pdf(pl, str_c(path_fl, ".pdf"), w, h)

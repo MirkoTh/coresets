@@ -330,55 +330,74 @@ round(t_end - t_start, 1)
 file_paths <- str_c("data/representation-and-decision/", dir("data/representation-and-decision/"))
 l_recovery_results <- map(file_paths, readRDS)
 
-ll_1_1 <- map_dbl(map(l_recovery_results_1_1, "1_1"), "value")
-ll_1_2 <- map_dbl(map(l_recovery_results_1_1, "1_2"), "value")
-ll_2_1 <- map_dbl(map(l_recovery_results_1_1, "2_1"), "value")
-ll_2_2 <- map_dbl(map(l_recovery_results_1_1, "2_2"), "value")
-
-tbl_lls <- as_tibble(cbind(ll_1_1, ll_1_2, ll_2_1, ll_2_2))
-tbl_lls$it <- 1:nrow(tbl_lls)
-
-tbl_lls <- tbl_lls %>% mutate(
-  n_data = c(rep(122, 14), rep(244, 14)),
-  bic_1_1 = ll_1_1 + 8*log(n_data), 
-  bic_1_2 = ll_1_2 + 9*log(n_data), 
-  bic_2_1 = ll_2_1 + 9*log(n_data), 
-  bic_2_2 = ll_2_2 + 10*log(n_data), 
-  aic_1_1 = ll_1_1 + 16, 
-  aic_1_2 = ll_1_2 + 18, 
-  aic_2_1 = ll_2_1 + 18, 
-  aic_2_2 = ll_2_2 + 20, 
-  bic_min = pmin(bic_1_1, bic_1_2, bic_2_1, bic_2_2),
-  is_recovered_ll = ll_1_1 == pmin(ll_1_1, ll_1_2, ll_2_1, ll_2_2),
-  is_recovered_bic = bic_1_1 == bic_min,
-  is_recovered_aic = aic_1_1 == pmin(aic_1_1, aic_1_2, aic_2_1, aic_2_2)
-) 
+tbl_recovered_agg_1_1 <- summarize_wiener_recovery_results(l_recovery_results_1_1, "1 Sim, 1 Drift")
+tbl_recovered_agg_1_2 <- summarize_wiener_recovery_results(l_recovery_results_1_2, "1 Sim, 2 Drifts")
+tbl_recovered_agg_2_1 <- summarize_wiener_recovery_results(l_recovery_results_2_1, "2 Sims, 1 Drift")
+tbl_recovered_agg_2_2 <- summarize_wiener_recovery_results(l_recovery_results_2_2, "2 Sims, 2 Drifts")
+tbl_recovered_agg_all <- rbind(tbl_recovered_agg_1_1, tbl_recovered_agg_1_2, tbl_recovered_agg_2_1, tbl_recovered_agg_2_2)
 
 
+summarize_wiener_recovery_results <- function(l_model_recovery, name_gen) {
+  ll_1_1 <- map_dbl(map(l_model_recovery, "1_1"), "value")
+  ll_1_2 <- map_dbl(map(l_model_recovery, "1_2"), "value")
+  ll_2_1 <- map_dbl(map(l_model_recovery, "2_1"), "value")
+  ll_2_2 <- map_dbl(map(l_model_recovery, "2_2"), "value")
+  
+  tbl_lls <- as_tibble(cbind(ll_1_1, ll_1_2, ll_2_1, ll_2_2))
+  tbl_lls$it <- 1:nrow(tbl_lls)
+  
+  tbl_lls <- tbl_lls %>% mutate(
+    n_data = 122,
+    bic_1_1 = ll_1_1 + 8*log(n_data), 
+    bic_1_2 = ll_1_2 + 9*log(n_data), 
+    bic_2_1 = ll_2_1 + 9*log(n_data), 
+    bic_2_2 = ll_2_2 + 10*log(n_data), 
+    aic_1_1 = ll_1_1 + 16, 
+    aic_1_2 = ll_1_2 + 18, 
+    aic_2_1 = ll_2_1 + 18, 
+    aic_2_2 = ll_2_2 + 20, 
+    bic_min = pmin(bic_1_1, bic_1_2, bic_2_1, bic_2_2),
+    aic_min = pmin(aic_1_1, aic_1_2, aic_2_1, aic_2_2),
+    is_recovered_ll = ll_1_1 == pmin(ll_1_1, ll_1_2, ll_2_1, ll_2_2),
+    is_recovered_bic = bic_1_1 == bic_min,
+    is_recovered_aic = aic_1_1 == aic_min
+  ) 
+  
+  
+  
+  tbl_lls_long <- tbl_lls %>%
+    #select(it, n_data, bic_1_1, bic_1_2, bic_2_1, bic_2_2, is_recovered_bic, bic_min) %>%
+    #pivot_longer(c(bic_1_1, bic_1_2, bic_2_1, bic_2_2)) %>%
+    select(it, n_data, aic_1_1, aic_1_2, aic_2_1, aic_2_2, is_recovered_aic, aic_min) %>%
+    pivot_longer(c(aic_1_1, aic_1_2, aic_2_1, aic_2_2)) %>%
+    #pivot_longer(c(aic_bivar, aic_hotspot, aic_strat)) %>%
+    #pivot_longer(c(ll_bivar, ll_hotspot, ll_strat)) %>%
+    mutate(name = factor(name))
+  
+  levels(tbl_lls_long$name) <- c("1 Sim, 1 Drift", "1 Sim, 2 Drifts", "2 Sims, 1 Drift", "2 Sims, 2 Drifts")
+  
+  tbl_recovered_agg <- grouped_agg(
+    tbl_lls_long %>% filter(aic_min == value), 
+    c(name, n_data), #  
+    c(is_recovered_aic)
+  ) %>% select(name, n_data, n) %>%
+    mutate(model_in = name_gen) %>% ungroup()
+  
+  return(tbl_recovered_agg)
+}
 
-tbl_lls_long <- tbl_lls %>%
-  select(it, n_data, bic_1_1, bic_1_2, bic_2_1, bic_2_2, is_recovered_bic, bic_min) %>%
-  pivot_longer(c(bic_1_1, bic_1_2, bic_2_1, bic_2_2)) %>%
-  #pivot_longer(c(aic_bivar, aic_hotspot, aic_strat)) %>%
-  #pivot_longer(c(ll_bivar, ll_hotspot, ll_strat)) %>%
-  mutate(name = factor(name))
 
-levels(tbl_lls_long$name) <- c("1 Sim, 1 Drift", "1 Sim, 2 Drifts", "2 Sims, 1 Drift", "2 Sims, 2 Drifts")
 
-tbl_recovered_agg <- grouped_agg(
-  tbl_lls_long %>% filter(bic_min == value), 
-  c(name, n_data), #  
-  c(is_recovered_bic)
-) %>% select(name, n_data, n) %>%
-  mutate(model_in = "1 Sim, 1 Drift")
-
-ggplot(tbl_recovered_agg, aes(model_in, name)) +
+ggplot(tbl_recovered_agg_all, aes(model_in, name)) +
   geom_tile(aes(fill = n), show.legend = FALSE) +
+  geom_tile(data = tbl_recovered_agg_all %>% filter(name == model_in), aes(model_in, name), color = "black", size = 3, alpha = 0) +
+  geom_tile(data = tbl_recovered_agg_all %>% filter(name == model_in), aes(model_in, name), color = "white", size = 1, alpha = 0) +
   geom_label(aes(label = n)) +
   facet_wrap(~ n_data) + 
   theme_bw() +
   scale_x_discrete(expand = c(0, 0)) +
   scale_y_discrete(expand = c(0, 0)) +
+  scale_fill_viridis_c(guide = "none") +
   labs(x = "Model In", y = "Model Out") +
   theme(
     strip.background = element_rect(fill = "white"),
