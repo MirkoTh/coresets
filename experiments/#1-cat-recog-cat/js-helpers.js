@@ -237,3 +237,94 @@ function color(id, col) {
 function change(x, y) {
     document.getElementById(x).innerHTML = y;
 }
+
+function create_randomly_sampled_stimuli(n_trials_train, x1_max, x2_max) {
+    var n_trials_recog = n_trials_train * 2; // contains equal number of training stimuli and lure stimuli
+    var n_trials_generalize = n_trials_train;
+
+    var id0 = []; // item ids for all cat 0 stimuli
+    var id1 = []; // item ids for all cat 1 stimuli
+    var cat0 = []; // category labels for all category 0 stimuli (i.e., cat 0)
+    var cat1 = []; // category labels for all category 1 stimuli (i.e., cat 1)
+    var x = []; // x coordinates for all stimuli
+    var y = []; // y coordinates for all stimuli
+
+    // diagonal is excluded in information-integration structure
+    counter = 0;
+    for (var i = 1; i <= x1_max; i++) {
+        for (var j = 1; j <= x2_max; j++) {
+            x[counter] = i;
+            y[counter] = j;
+            if (i > j) {
+                id0.push(counter);
+                cat0.push(0);
+                counter += 1;
+            } else if (i < j) {
+                id1.push(counter);
+                cat1.push(1);
+                counter += 1;
+            }
+        }
+    }
+    // generate random sequence of stimuli in both categories
+    const prep0 = Array(id0.length).fill().map((element, index) => index);
+    const prep1 = Array(id1.length).fill().map((element, index) => index);
+    const which_ids_0 = jsPsych.randomization.sampleWithoutReplacement(prep0, n_trials_recog / 2 + n_trials_generalize / 2);
+    const which_ids_1 = jsPsych.randomization.sampleWithoutReplacement(prep1, n_trials_recog / 2 + n_trials_generalize / 2);
+
+    stimuli = make_stimuli(n_trials_train, n_trials_recog, n_trials_generalize, which_ids_0, which_ids_1);
+
+
+    // randomize train, recog, and generalize stimuli and cat ids
+    both_train = shuffle_items(stimuli["ids_train"], stimuli["cat_train"]);
+    both_lures = shuffle_items(stimuli["ids_lures"], stimuli["cat_lures"]);
+    both_generalize = shuffle_items(stimuli["ids_generalize"], stimuli["cat_generalize"]);
+
+    for (var i = 0; i < both_train["ids"].length; i++) {
+        both_train["is_old"][i] = 1;
+    }
+
+    for (var i = 0; i < both_lures["ids"].length; i++) {
+        both_lures["is_old"][i] = 0;
+    }
+
+    // reshuffle for presentation during recognition
+    recognition_probes = shuffle_items(
+        both_train["ids"].concat(both_lures["ids"]),
+        both_train["cat"].concat(both_lures["cat"]),
+        both_train["is_old"].concat(both_lures["is_old"])
+    );
+
+    obj_out = {
+        train: both_train,
+        generalize: both_generalize,
+        recognition: recognition_probes,
+        x: x,
+        y: y,
+        id0: id0,
+        id1: id1
+    }
+
+    return (obj_out)
+}
+
+function cross_vals(x_prep, y_prep, id_start_val, id, cat, x, y) {
+    counter = 0;
+    for (let i of x_prep) {
+        for (let j of y_prep) {
+            x[counter] = i;
+            y[counter] = j;
+            id.push(id_start_val + counter);
+            if (i > j) {
+                cat.push(0);
+            } else if (i < j) {
+                cat.push(1);
+            }
+            counter += 1;
+        }
+    }
+    out = {
+        x: x, y: y, id: id, cat: cat
+    };
+    return (out)
+}
