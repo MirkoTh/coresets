@@ -4,7 +4,7 @@
   width: 80%;
   height: 80%;
   list-style-position: inside;
-  font-size: 30px;
+  font-size: 20px;
   font-family: 'Helvetica';
   line-height: 1.6em;
   margin: auto;
@@ -63,7 +63,8 @@
 .default_button {
   height: 30px;
   font-size: 80%;
-  position:absolute; top: 85%;
+  position: absolute;
+  top: 85%;
 }
 
 .cr_button {

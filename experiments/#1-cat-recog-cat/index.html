@@ -9,13 +9,14 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="-1">
-    <title>2D Representations</title>
+    <title>City Surveyor Mira</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="2D Representations">
+    <meta name="description" content="City Surveyor Mira">
     <meta name="author" content="Mirko Thalmann, Akshay Jagadish, & Eric Schulz">
     <link rel="stylesheet" href="my-style.css" cache-control="public">
     <link rel="stylesheet" href="jspsych-dist/dist/jspsych.css">
     <script src="js-helpers.js" charset="utf-8" cache-control="public"></script>
+    <script src="js/jquery.min.js"></script>
 
 </head>
 
@@ -60,7 +61,7 @@
 
             <br><br>
             <button id="consent_button" type="button" name="button" id="buttonConsentForm" class="jspsych-btn"
-                style=" position: absolute;left: 45%;" onclick="direct_to_study()"> Informed
+                style=" position: absolute;left: 45%;" onclick="clickStart('page0','page1')"> Informed
                 Consent</button><br>
             <!-- clickStart('page0', 'page1') -->
 
@@ -68,19 +69,27 @@
 
 
 
-        <div id="page1" style="display:none;">
+        <div id="page1" style="display:none;" class="centeredtext">
             <h1>Information on tasks and purpose of the study</h4>
-                Today, you are carrying out various tasks with friendly monsters.<br>
-                You are randomly going to be assigned to one of several conditions. <br>
-                Depending on the condition you are in, you are going to carry out a subset of the following tasks:
-                <ul class="centeredtext">
-                    <li><b>Memory:</b> Remember a monster on every trial as precisely as possible</li>
-                    <li><b>Similarity:</b> Use your memory to compare the monster from the current trial to the monster
-                        of
-                        the previous trial; again as precisely as possible</li>
-                    <li><b>Category Learning</b>: The monsters come from different tribes; learn to categorize them into
-                        the
-                        tribes they come from over several trials</li>
+                Today, you are carrying out two different tasks with basic objects, arrows of different lengths and
+                orientations.<br>
+                You are slipping into the role of a city surveyor, Mira, who examines various of these basic
+                objects.<br><br>
+
+                <span>
+                    <img title="mira-walking" src="stimuli/mira-measure.jpg" height="300px" cache-control="public">
+                </span>
+                <br><br>
+
+                The city's road network is relatively special.<br>
+                So, the following are going to be your tasks:<br>
+
+                <ul>
+                    <li><b>Category Learning</b>: Mira only likes some of the arrows, because they are useful for the
+                        city's road network.<br>
+                        Learn to categorize the arrows into those, which Mira likes, and those, which Mira dislikes.
+                    </li>
+                    <li><b>Memory:</b> Remember whether you have already seen a certain arrow before or not</li>
                 </ul> <br>
                 The purpose of the study is to gain knowledge about how people mentally represent two-dimensional
                 information.<br>
@@ -98,11 +107,9 @@
                     Please do not accept this task if you are using a touch screen device, it will not work!</b><br>
 
                 <h4>How much time will it take and how much can you earn?</h4>
-                The study will take <b>approx 90 minutes</b>.<br>
-                You will be paid <b>£9.80</b> pounds for participation plus a bonus of up to <b>£5.20</b> pounds
-                depending on
-                your performance.<br>
-                Please note that this is going to be a <b>long and challenging </b>study!</b><br>
+                The study will take <b>approx 45 minutes</b>.<br>
+                You will be paid <b>£4.50</b> pounds for participation plus a bonus of up to <b>£3.0</b> pounds
+                depending on your performance.<br>
 
                 <h4>Confidentiality</h4>
                 Your participation in this study will remain confidential.
@@ -188,17 +195,18 @@
             <br>
 
 
-            <h1>Welcome to Planet Rodrak</h1>
+            <h1>Welcome to Mira's city</h1>
             <br>
-            Today, you find yourself in <b>Planet Rodrak</b>.<br>
-            Your task is to learn which images the alien Mira likes.<br>
+            Today, you find yourself in <b>Mira's city</b>.<br>
+            Your task is to learn which arrows are useful for the city surveyor called Mira.<br>
             Possible images could look like the following:
             <div>
                 <img src="stimuli/stimulus[1,1].png" height="300px">
-                <img src="stimuli/stimulus[100,100].png" height="300px">
+                <img src="stimuli/stimulus[100,56].png" height="300px">
+                <img src="stimuli/stimulus[99,80].png" height="300px">
             </div></br>
             <br>
-            These are just two examples, though.<br>
+            These are just a few examples, though.<br>
 
             <h1>Instructions</h1>
             <p>
@@ -206,22 +214,23 @@
             </p>
             <ol>
                 <li>
-                    <b>Mira's preferences:</b>On every trial you are presented with an object.<br>
-                    Your task is to learn which objects Mira likes and which one not.<br>
-                    If you think, Mira likes the object, press the 'F' button on the keyboard.<br>
-                    If you think, Mira does not like the object, press the 'J' button on the keyboard.<br>
+                    <b>Mira's preferences:</b>On every trial you are presented with an arrow.<br>
+                    As the city's roadwork is relatively special, Mira only likes certain arrows, but not others.<br>
+                    Your task is to learn which objects Mira likes and which ones not.<br>
+                    If you think, Mira likes the object, press the 'j' button on the keyboard.<br>
+                    If you think, Mira does not like the object, press the 'f' button on the keyboard.<br>
                     You will get help via feedback on every trial.<br>
-                    <b> --> Takes approx. 10 min</b><br>
+                    <b> --> Takes approx. 15 min</b><br>
                 </li>
                 <br>
                 <li>
-                    <b>Recognition:</b>You are going to see the objects presented in 'Mira's preferences' together with
-                    new objects.<br>
-                    Your task is to say if you have seen the respective object presented on a given trial or not as
+                    <b>Recognition:</b>You are going to see the arrows presented in 'Mira's preferences' together with
+                    new arrows.<br>
+                    Your task is to say if you have seen the respective arrow presented on a given trial or not as
                     accurately and quickly as possible.<br>
-                    If the object has been presented before, press the 'J' button.<br>
-                    If the object has not been presented before, press the 'F' button.<br>
-                    <b> --> Takes approx. 10 min</b><br>
+                    If the object has been presented before, press the 'j' button.<br>
+                    If the object has not been presented before, press the 'f' button.<br>
+                    <b> --> Takes approx. 15 min</b><br>
                 </li>
                 <br>
                 <li>
@@ -229,8 +238,8 @@
                     You again have to say if Mira likes the object or not. However, this time, you will not get any
                     feedback to sharpen your understanding of Mira's preferences.<br>
                     Please use again the same response buttons as in the first part:<br>
-                    If you think, Mira likes the object, press the 'F' button on the keyboard.<br>
-                    If you think, Mira does not like the object, press the 'J' button on the keyboard.<br>
+                    If you think, Mira likes the object, press the 'j' button on the keyboard.<br>
+                    If you think, Mira does not like the object, press the 'f' button on the keyboard.<br>
                     <b> --> Takes approx. 10 min</b><br>
                 </li>
             </ol>
@@ -266,13 +275,13 @@
                     <b>How do you respond in the task called 'Mira's preferences'? </b><br>
                     <label for="q2l1" style="font-weight: normal;"><input type="radio" name="q2" id="l1" /><span
                             id="q2l1">
-                            Using the 'F' (= Mira dislikes) and 'J' (= Mira likes) buttons on the keyboard.
+                            Using the 'j' (= Mira dislikes) and 'f' (= Mira likes) buttons on the keyboard.
                         </span></label><br>
                     <label for="q2l2" style="font-weight: normal;"><input type="radio" name="q2" id="l2" /><span
                             id="q2l2">
                             Using the right and left mouse buttons </span></label><br>
                     <label for="q2l3" style="font-weight: normal;"><input type="radio" name="q2" id="icheck2"> <span
-                            id="q2icheck2"> Using the 'F' (= Mira likes) and 'J' (= Mira dislikes) buttons on the
+                            id="q2icheck2"> Using the 'j' (= Mira likes) and 'f' (= Mira dislikes) buttons on the
                             keyboard </span></label><br>
                     <br>
                 </fieldset>
@@ -292,10 +301,10 @@
                     <label for="q4l1" style="font-weight: normal;"><input type="radio" name="q4" id="l1" /><span
                             id="q4l1"> Using keys 1-4 on the keyboard. 4 is like, 1 is dislike </span></label><br>
                     <label for="q4l2" style="font-weight: normal;"><input type="radio" name="q4" id="l2" /><span
-                            id="q4l2"> Using the 'F' (= not seen before) and 'J' (= seen before) buttons on the
+                            id="q4l2"> Using the 'j' (= not seen before) and 'f' (= seen before) buttons on the
                             keyboard. </span></label><br>
                     <label for="q4l3" style="font-weight: normal;"><input type="radio" name="q4" id="icheck4"> <span
-                            id="q4icheck4"> Using the 'F' (= seen before) and 'J' (= not seen before) buttons on the
+                            id="q4icheck4"> Using the 'j' (= seen before) and 'f' (= not seen before) buttons on the
                             keyboard. </span></label><br>
                     <br>
                 </fieldset>
@@ -309,7 +318,7 @@
                             Roughly 60 minutes </span></label><br>
                     <label for="q5l3" style="font-weight: normal;"><input type="radio" name="q5" id='icheck5'><span
                             id="q5icheck5">
-                            Roughly 30 minutes </span></label><br>
+                            Roughly 45 minutes </span></label><br>
                     <label for="q5l4" style="font-weight: normal;"><input type="radio" name="q5" id='l3'><span
                             id="q5l3">
                             Roughly 120 minutes </span></label><br>

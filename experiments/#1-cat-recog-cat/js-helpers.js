@@ -165,6 +165,16 @@ function redirect_to_prolific() {
     window.location.href = "https://app.prolific.co/submissions/complete?cc=240D34C0";
 }
 
+function colorWrongAnswer(question, col) {
+    const rbs = document.querySelectorAll('input[name="' + question + '\"]');
+    for (const rb of rbs) {
+        if (rb.checked) {
+            color(question + rb.id, col)
+            break;
+        }
+    }
+}
+
 var flag = 0;
 var instcounter = 0;
 function instructioncheck(pg, pg_prev) {

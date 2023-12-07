@@ -327,6 +327,23 @@
         trial_duration: 500,
     };
 
+    var feedback2 = {
+        type: jsPsychImageKeyboardResponse,
+        stimulus: function (data) {
+            var is_correct = jsPsych.data.get().last(2).values()[0].correct;
+            if (is_correct == true) {
+                var img = "stimuli/mira-like.jpg"
+            } else if (is_correct == false) {
+                var img = "stimuli/mira-dislike.jpg"
+            }
+            return (img)
+        },
+        stimulus_height: 300,
+        choices: "NO_KEYS",
+        trial_duration: 1000,
+    };
+
+
     var shadow_response_recog = {
         type: jsPsychHtmlKeyboardResponse,
         stimulus: function (data) {
@@ -358,7 +375,7 @@
     };
 
     var train_procedure = {
-        timeline: [fixation, train_category, feedback],
+        timeline: [fixation, train_category, feedback, feedback2],
         timeline_variables: train_stimuli
     }
 
